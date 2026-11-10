@@ -17,9 +17,9 @@
 
   <title>Seclusa Lockdown</title>
 
-  <script src="static/js/theme-boot.js?v=0.1.3"></script>
+  <script src="static/js/theme-boot.js?v=0.1.45"></script>
   <link rel="stylesheet" href="static/css/seclusa-base.css">
-  <link rel="stylesheet" href="static/css/app.css?v=0.1.3">
+  <link rel="stylesheet" href="static/css/app.css?v=0.1.45">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="static/icons/icon-192.png">
@@ -39,7 +39,9 @@
   <span id="hud-score">Score 0</span>
   <span id="hud-hp">HP 5</span>
   <span id="hud-ammo">Ammo 80</span>
-  <span id="hud-weapon">Pistol</span>
+  <span class="playhud-guns" id="hud-guns" aria-label="Weapons">
+    <button type="button" class="hud-gun on" data-gun="pistol" aria-pressed="true">Pistol</button>
+  </span>
   <span id="hud-deck"></span>
   <span class="playhud-cards" aria-label="Cards">
     <i id="hud-card-R" data-card="R"></i>
@@ -56,10 +58,10 @@
     <div class="overlay-card menu-card">
       <p class="menu-kicker">Offline · local only</p>
       <h2 class="overlay-title">Seclusa Lockdown</h2>
-      <p class="overlay-lede">Your ship is down on the sand. The fortress in front of you has the parts that can get you off this rock.</p>
+      <p class="overlay-lede">Your ship is down in the grass outside the fort. Salvage parts inside will get you off this rock.</p>
 
       <ol class="story-beats">
-        <li><span class="story-num">1</span><span class="story-text"><strong>Crash site.</strong> The wreck is outside the wall. Take the red keycard and open the outer gate.</span></li>
+        <li><span class="story-num">1</span><span class="story-text"><strong>Crash site.</strong> Open grass and wreck. Shoot yellow scrap for credits, grab the red keycard, open the gate.</span></li>
         <li><span class="story-num">2</span><span class="story-text"><strong>The decks.</strong> Grunts rush. Crawlers hug the walls. Fortresses hold the doors. Doors open red, then green, then blue.</span></li>
         <li><span class="story-num">3</span><span class="story-text"><strong>Salvage bay.</strong> The ship parts are at the end. Clear the fortress core and patch the hull.</span></li>
       </ol>
@@ -140,11 +142,19 @@
     </button>
     <button type="button" class="shop-item" data-shop-buy="shotgun">
       <span class="shop-name">Scatter gun</span>
-      <span class="shop-tag" data-cost="35">35 cr</span>
+      <span class="shop-tag" data-cost="28">28 cr</span>
+    </button>
+    <button type="button" class="shop-item" data-shop-buy="smg">
+      <span class="shop-name">Auto gun</span>
+      <span class="shop-tag" data-cost="40">40 cr</span>
     </button>
     <button type="button" class="shop-item" data-shop-buy="rifle">
       <span class="shop-name">Rifle</span>
-      <span class="shop-tag" data-cost="55">55 cr</span>
+      <span class="shop-tag" data-cost="52">52 cr</span>
+    </button>
+    <button type="button" class="shop-item" data-shop-buy="lance">
+      <span class="shop-name">Lance</span>
+      <span class="shop-tag" data-cost="68">68 cr</span>
     </button>
     <button type="button" class="shop-item" data-shop-buy="heal">
       <span class="shop-name">+1 HP</span>
@@ -170,13 +180,13 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="static/js/store.js?v=0.1.3"></script>
-<script src="static/js/theme.js?v=0.1.3"></script>
-<script src="static/js/settings.js?v=0.1.3"></script>
-<script src="static/js/audio.js?v=0.1.3"></script>
-<script src="static/js/map.js?v=0.1.3"></script>
-<script src="static/js/input.js?v=0.1.3"></script>
-<script src="static/js/game.js?v=0.1.3"></script>
-<script src="static/js/app.js?v=0.1.3"></script>
+<script src="static/js/store.js?v=0.1.45"></script>
+<script src="static/js/theme.js?v=0.1.45"></script>
+<script src="static/js/settings.js?v=0.1.45"></script>
+<script src="static/js/audio.js?v=0.1.45"></script>
+<script src="static/js/map.js?v=0.1.45"></script>
+<script src="static/js/input.js?v=0.1.45"></script>
+<script src="static/js/game.js?v=0.1.45"></script>
+<script src="static/js/app.js?v=0.1.45"></script>
 </body>
 </html>

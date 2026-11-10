@@ -97,4 +97,17 @@ test("twenty decks parse and stay solvable", () => {
   assert.ok(/Crash/.test(crash.name), "start name");
   assert.ok((crash.ships || []).length >= 1, "crash has ship");
   assert.ok(crash.tiles.some((row) => row.some((t) => t.outdoor)), "crash has outdoor floor");
+  assert.ok((crash.creditCrates || []).length >= 4, "crash has credit scrap");
+  assert.ok((crash.towers || []).length >= 2, "crash has armed towers");
+  const macro = GameMap.MACRO || 3;
+  for (let y = 0; y < 5 * macro; y++) {
+    for (let x = 0; x < crash.cols; x++) {
+      assert.notEqual(crash.tiles[y][x].kind, "wall", "open approach row " + y);
+    }
+  }
+  assert.equal(crash.tile, 16, "fine grid — 48px wall pads are a bug");
+  assert.equal(macro, 3);
+  assert.equal(crash.width, 32 * macro * crash.tile, "world width matches old 48-scale");
 });
+
+

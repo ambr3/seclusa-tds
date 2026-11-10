@@ -12,6 +12,7 @@
   var raf = 0;
   var lastTs = 0;
   var looping = false;
+  var hudCache = "";
 
   function syncThemeChrome() {
     if (window.Theme.paintModeChrome) window.Theme.paintModeChrome();
@@ -83,9 +84,9 @@
     var copy = $("menu-controls");
     if (!copy) return;
     if (window.GameSettings.getAutoAim()) {
-      copy.textContent = "WASD move · Shift dash · F breach · Space fire · E terminal · P pause";
+      copy.textContent = "WASD move · 1–5 guns · Shift dash · F breach · Space fire · E terminal · P pause";
     } else {
-      copy.textContent = "WASD move · mouse aim · Shift dash · F breach · click fire · E terminal";
+      copy.textContent = "WASD move · mouse aim · 1–5 guns · Shift dash · F breach · click fire · E terminal";
     }
   }
 
@@ -93,9 +94,10 @@
     var progress = window.GameSettings.getProgress();
     var best = $("menu-best");
     if (best) {
-      best.textContent = progress.bestScore
+      var scoreLine = progress.bestScore
         ? ("Best score " + progress.bestScore + (progress.cleared ? " · Parts recovered" : ""))
         : "No runs yet — salvage stays on this device.";
+      best.textContent = scoreLine + " · v" + BUILD;
     }
     var cont = $("btn-continue");
     if (cont) {
@@ -127,7 +129,7 @@
 
     document.querySelectorAll("[data-shop-buy]").forEach(function (btn) {
       var id = btn.getAttribute("data-shop-buy");
-      var ownedGear = (id === "shotgun" || id === "rifle" || id === "dash" || id === "hull") && snapshot.owned[id];
+      var ownedGear = (id === "shotgun" || id === "smg" || id === "rifle" || id === "lance" || id === "dash" || id === "hull") && snapshot.owned[id];
       var carrying = id === "breach" && snapshot.breachCharges >= 1;
       btn.disabled = !!(ownedGear || carrying);
       var tag = btn.querySelector(".shop-tag");
@@ -284,6 +286,40 @@
     raf = window.requestAnimationFrame(frame);
   }
 
+  var gunRackHtml = "";
+  var gunRackWired = false;
+  function syncGunRack(hud) {
+    var rack = $("hud-guns");
+    if (!rack) return;
+    if (!gunRackWired) {
+      gunRackWired = true;
+      rack.addEventListener("click", function (event) {
+        var btn = event.target;
+        while (btn && btn !== rack && !(btn.getAttribute && btn.getAttribute("data-gun"))) {
+          btn = btn.parentNode;
+        }
+        if (!btn || btn === rack || !game || !game.setWeapon) return;
+        var id = btn.getAttribute("data-gun");
+        if (id) game.setWeapon(id);
+      });
+    }
+    var guns = hud.guns || [];
+    var html = [];
+    var i;
+    for (i = 0; i < guns.length; i++) {
+      var g = guns[i];
+      html.push(
+        '<button type="button" class="hud-gun' + (g.active ? " on" : "") +
+        '" data-gun="' + g.id + '" aria-pressed="' + (g.active ? "true" : "false") + '">' +
+        g.name + "</button>"
+      );
+    }
+    var next = html.join("");
+    if (next === gunRackHtml) return;
+    gunRackHtml = next;
+    rack.innerHTML = next;
+  }
+
   function syncPlayHud() {
     var bar = $("playhud");
     if (!bar || !game || !game.hudSnapshot) return;
@@ -291,8 +327,19 @@
     var menuOpen = menu && !menu.hidden && !menu.classList.contains("hidden");
     var show = game.isPlaying() && !game.isOver() && !menuOpen;
     bar.hidden = !show;
-    if (!show) return;
+    if (!show) {
+      hudCache = "";
+      return;
+    }
     var hud = game.hudSnapshot();
+    var key = [
+      hud.score, hud.hp, hud.ammo, hud.deck, hud.gear || "",
+      hud.lowHp ? 1 : 0, hud.lowAmmo ? 1 : 0,
+      hud.cards.R ? 1 : 0, hud.cards.G ? 1 : 0, hud.cards.B ? 1 : 0,
+      (hud.guns || []).map(function (g) { return g.id + (g.active ? "*" : ""); }).join(",")
+    ].join("|");
+    if (key === hudCache) return;
+    hudCache = key;
     $("hud-score").textContent = "Score " + hud.score;
     var hpEl = $("hud-hp");
     hpEl.textContent = "HP " + hud.hp;
@@ -300,7 +347,7 @@
     var ammoEl = $("hud-ammo");
     ammoEl.textContent = "Ammo " + hud.ammo;
     ammoEl.classList.toggle("is-low", hud.lowAmmo);
-    $("hud-weapon").textContent = hud.weapon;
+    syncGunRack(hud);
     $("hud-deck").textContent = hud.deck;
     ["R", "G", "B"].forEach(function (c) {
       var chip = $("hud-card-" + c);
@@ -360,9 +407,27 @@
     syncPlayHud();
   }
 
+  var BUILD = "0.1.45";
+
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;
     window.addEventListener("load", function () {
+      var host = location.hostname;
+      var local = host === "127.0.0.1" || host === "localhost";
+      /* Local preview: drop SW/caches so every refresh actually loads new JS. */
+      if (local) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (reg) { reg.unregister(); });
+        });
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (key) {
+              if (key.indexOf("seclusa-lockdown-") === 0) caches.delete(key);
+            });
+          });
+        }
+        return;
+      }
       navigator.serviceWorker.register("./sw.js").catch(function () { /* offline first load */ });
     });
   }
@@ -394,7 +459,10 @@
 
     window.addEventListener("resize", function () {
       fitCanvas();
-      if (!looping) game.render();
+      if (!looping) {
+        if (game.paintMenuBackdrop) game.paintMenuBackdrop();
+        else game.render();
+      }
     });
 
     fitCanvas();

@@ -86,7 +86,23 @@ button.accentpill:active { transform: scale(.96); }
 }
 .playhud[hidden] { display: none; }
 .playhud .is-low { color: var(--danger, #f2857c); }
-#hud-weapon { color: #c2410c; }
+.playhud-guns { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.hud-gun {
+  margin: 0;
+  padding: 2px 8px;
+  border: 2px solid #1a120c;
+  border-radius: 6px;
+  background: transparent;
+  color: #5c4633;
+  font: inherit;
+  cursor: pointer;
+}
+.hud-gun.on {
+  background: #c2410c;
+  border-color: #9a3412;
+  color: #fff7ed;
+}
+.hud-gun:focus-visible { outline: 2px solid #1a120c; outline-offset: 1px; }
 #hud-deck {
   min-width: 0;
   color: #5c4633;
@@ -114,6 +130,7 @@ button.accentpill:active { transform: scale(.96); }
   flex: 1;
   min-height: 0;
   width: 100%;
+  overflow: hidden;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;

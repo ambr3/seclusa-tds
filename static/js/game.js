@@ -10,8 +10,10 @@
   var SPAWN_START = 3.1;
   var SPAWN_MIN = 1.35;
   var PLAYER_R = 14;
-  var KEY_R = 10;
+  var KEY_R = 9;
   var PICK_R = 14;
+  /* Unlock reach — stand back so door-campers do not melt you on open. */
+  var DOOR_OPEN_R = 56;
   var MAX_HP = 5;
   var IFRAMES = 0.8;
   var ORANGE = "#f97316";
@@ -26,6 +28,8 @@
   var AMMO_START = 80;
   var AMMO_PICKUP = 30;
 
+  var GUN_ORDER = ["pistol", "shotgun", "smg", "rifle", "lance"];
+
   var WEAPONS = {
     pistol: {
       id: "pistol", name: "Pistol",
@@ -37,10 +41,20 @@
       cooldown: 0.55, speed: 460, radius: 3.5,
       cost: 2, damage: 1, pellets: 5, spread: 0.22
     },
+    smg: {
+      id: "smg", name: "Auto",
+      cooldown: 0.07, speed: 500, radius: 3,
+      cost: 1, damage: 1, pellets: 1, spread: 0.04
+    },
     rifle: {
       id: "rifle", name: "Rifle",
       cooldown: 0.11, speed: 640, radius: 3.5,
       cost: 1, damage: 1, pellets: 1, spread: 0
+    },
+    lance: {
+      id: "lance", name: "Lance",
+      cooldown: 0.78, speed: 880, radius: 5,
+      cost: 3, damage: 3, pellets: 1, spread: 0
     }
   };
 
@@ -49,10 +63,36 @@
     { id: "heal", kind: "heal", label: "+1 HP", cost: 18 },
     { id: "breach", kind: "charge", label: "Breach charge", cost: 26 },
     { id: "dash", kind: "gear", label: "Dash", cost: 32 },
-    { id: "shotgun", kind: "weapon", label: "Scatter gun", cost: 35 },
+    { id: "shotgun", kind: "weapon", label: "Scatter gun", cost: 28 },
+    { id: "smg", kind: "weapon", label: "Auto gun", cost: 40 },
     { id: "hull", kind: "gear", label: "Hull patch", cost: 40 },
-    { id: "rifle", kind: "weapon", label: "Rifle", cost: 55 }
+    { id: "rifle", kind: "weapon", label: "Rifle", cost: 52 },
+    { id: "lance", kind: "weapon", label: "Lance", cost: 68 }
   ];
+
+  function blankGunOwned() {
+    return { pistol: true, shotgun: false, smg: false, rifle: false, lance: false };
+  }
+
+  function normalizeGunOwned(src) {
+    src = src || {};
+    return {
+      pistol: true,
+      shotgun: !!src.shotgun,
+      smg: !!src.smg,
+      rifle: !!src.rifle,
+      lance: !!src.lance
+    };
+  }
+
+  function preferWeapon(guns, want) {
+    if (want && guns[want] && WEAPONS[want]) return want;
+    var i;
+    for (i = GUN_ORDER.length - 1; i >= 0; i--) {
+      if (guns[GUN_ORDER[i]]) return GUN_ORDER[i];
+    }
+    return "pistol";
+  }
 
   /* Along the wall when one is close, otherwise straight at the pilot. */
   function crawlerVector(px, py, ex, ey, nx, ny) {
@@ -114,6 +154,9 @@
     if (kind === "boss") {
       return { r: 30, hp: Math.max(10, Math.round(16 * mods.enemyHp)), speed: 0.45, score: 45 };
     }
+    if (kind === "tower") {
+      return { r: 22, hp: Math.max(3, Math.round(5 * mods.enemyHp)), speed: 0, score: 8 };
+    }
     // grunt
     return { r: 12, hp: Math.max(1, Math.round(1 * mods.enemyHp)), speed: 0.95, score: 2 };
   }
@@ -129,6 +172,8 @@
     var won = false;
     var score = 0;
     var hp = MAX_HP;
+    var maxHp = MAX_HP;
+    var hurtBank = 0;
     var iframes = 0;
     var fireWait = 0;
     var spawnWait = 0;
@@ -138,7 +183,7 @@
     var enemyShots = [];
     var enemies = [];
     var inventory = { R: false, G: false, B: false };
-    var owned = { pistol: true, shotgun: false, rifle: false, dash: false, hull: false };
+    var owned = { pistol: true, shotgun: false, smg: false, rifle: false, lance: false, dash: false, hull: false };
     var breachCharges = 0;
     var dashLeft = 0;
     var dashCool = 0;
@@ -153,6 +198,8 @@
     var map = null;
     var floorList = [];
     var floorDecor = [];
+    var minimapCache = null;
+    var minimapCacheKey = "";
     var camX = 0;
     var camY = 0;
     var onOver = null;
@@ -195,15 +242,15 @@
 
     function makeEnemy(x, y, kind) {
       var k = kind || "grunt";
-      if (k === "runner") k = "crawler";
+      if (k === "runner" || k === "crawler") k = "grunt";
       if (k === "brute") k = "fortress";
       var st = enemyStats(k, mods);
       return {
         x: x, y: y, r: st.r, hp: st.hp, maxHp: st.hp,
         speed: st.speed, kind: k, score: st.score,
         spawnCool: k === "boss" ? 2.5 : 0,
-        fireCool: (k === "drone" || k === "fortress") ? 0.8 : 0,
-        planted: false,
+        fireCool: (k === "drone" || k === "grunt" || k === "fortress" || k === "tower") ? 0.8 : 0,
+        planted: k === "tower",
         post: null
       };
     }
@@ -237,57 +284,127 @@
         });
       }
 
-      // Sparse visual litter — never solid, never piled on solids/start/keys
+      // Visual litter. Candidates are shuffled by hash, then kept only if they
+      // sit well clear of each other, the start, doors, keys, and tower bodies.
+      var macro = map.macro || 3;
+      var clearStart = map.tile * macro * 2.5;
+      var litterGap = map.tile * macro * 2.6;
+      var cands = [];
       for (i = 0; i < floorList.length; i++) {
         var cell = floorList[i];
+        if (cell.x % macro !== (macro >> 1) || cell.y % macro !== (macro >> 1)) continue;
         var tile = map.tiles[cell.y][cell.x];
-        if (tile.kind === "exit") continue;
-        var cx = (cell.x + 0.5) * map.tile;
-        var cy = (cell.y + 0.5) * map.tile;
-        if (Math.hypot(cx - map.start.x, cy - map.start.y) < map.tile * 2.5) continue;
-
-        var nearSolid = false;
+        if (!tile || tile.kind === "exit") continue;
+        var outdoor = !!tile.outdoor;
+        var h = tileHash(cell.x, cell.y, 7);
+        if (h > (outdoor ? 0.2 : 0.55)) continue;
+        var span = map.tile * macro;
+        var wander = span * 0.72;
+        var cx = (cell.x + 0.5) * map.tile + (tileHash(cell.x, cell.y, 3) - 0.5) * wander;
+        var cy = (cell.y + 0.5) * map.tile + (tileHash(cell.x, cell.y, 5) - 0.5) * wander;
+        var kind;
+        if (outdoor) {
+          kind = h < 0.07 ? "scrap" : h < 0.14 ? "rock" : "stain";
+        } else {
+          var pick = tileHash(cell.x, cell.y, 13);
+          var indoorKinds = [
+            "rubble", "gravel", "drain", "bricks", "broken", "bucket", "cans",
+            "cracks", "crates", "hose", "lights", "tools", "tyre", "wood", "tin", "sandbag"
+          ];
+          kind = indoorKinds[Math.floor(pick * indoorKinds.length) % indoorKinds.length];
+        }
+        cands.push({
+          kind: kind,
+          x: cx,
+          y: cy,
+          rot: tileHash(cell.x, cell.y, 9) * Math.PI * 2,
+          v: Math.floor(tileHash(cell.x, cell.y, 11) * 4),
+          h: h,
+          outdoor: outdoor
+        });
+      }
+      cands.sort(function (a, b) { return a.h - b.h; });
+      var ci;
+      for (ci = 0; ci < cands.length; ci++) {
+        var cand = cands[ci];
+        if (Math.hypot(cand.x - map.start.x, cand.y - map.start.y) < clearStart) continue;
+        var crowded = false;
         var j;
         for (j = 0; j < floorDecor.length; j++) {
           var d = floorDecor[j];
-          var minD = d.solid ? map.tile * 1.4 : map.tile * 0.85;
-          if (Math.hypot(cx - d.x, cy - d.y) < minD) { nearSolid = true; break; }
+          var minD = d.solid ? map.tile * 2.2 : litterGap;
+          if (Math.hypot(cand.x - d.x, cand.y - d.y) < minD) { crowded = true; break; }
         }
-        if (nearSolid) continue;
-
-        // Keep clear of keys / doors / exits / ammo / terminals
+        if (crowded) continue;
         for (j = 0; j < map.keys.length; j++) {
-          if (Math.hypot(cx - map.keys[j].x, cy - map.keys[j].y) < map.tile) { nearSolid = true; break; }
+          if (Math.hypot(cand.x - map.keys[j].x, cand.y - map.keys[j].y) < map.tile * macro) {
+            crowded = true;
+            break;
+          }
         }
-        if (nearSolid) continue;
+        if (crowded) continue;
         for (j = 0; j < map.doors.length; j++) {
-          var dx = (map.doors[j].x + 0.5) * map.tile;
-          var dy = (map.doors[j].y + 0.5) * map.tile;
-          if (Math.hypot(cx - dx, cy - dy) < map.tile * 1.2) { nearSolid = true; break; }
+          var doorx = (map.doors[j].x + 0.5) * map.tile;
+          var doory = (map.doors[j].y + 0.5) * map.tile;
+          if (Math.hypot(cand.x - doorx, cand.y - doory) < map.tile * macro * 1.2) {
+            crowded = true;
+            break;
+          }
         }
-        if (nearSolid) continue;
-
-        var outdoor = !!tile.outdoor;
-        var h = tileHash(cell.x, cell.y, 7);
-        // Much sparser: ~12% outdoor, ~8% indoor
-        if (h > (outdoor ? 0.12 : 0.08)) continue;
-
-        var kind;
-        if (outdoor) {
-          kind = h < 0.03 ? "scrap" : h < 0.06 ? "rock" : h < 0.09 ? "stain" : "bolt";
-        } else {
-          kind = h < 0.025 ? "scrap" : h < 0.05 ? "stain" : "bolt";
+        if (crowded) continue;
+        for (j = 0; j < (map.towers || []).length; j++) {
+          var foot = towerFootAt(map.towers[j].x, map.towers[j].y);
+          if (Math.abs(cand.x - foot.x) < foot.half + 16 && Math.abs(cand.y - foot.y) < foot.half + 16) {
+            crowded = true;
+            break;
+          }
         }
+        if (crowded) continue;
         floorDecor.push({
-          kind: kind,
-          x: cx + (tileHash(cell.x, cell.y, 3) - 0.5) * 18,
-          y: cy + (tileHash(cell.x, cell.y, 5) - 0.5) * 18,
-          rot: tileHash(cell.x, cell.y, 9) * Math.PI * 2,
-          v: Math.floor(tileHash(cell.x, cell.y, 11) * 4),
+          kind: cand.kind,
+          x: cand.x,
+          y: cand.y,
+          rot: cand.rot,
+          v: cand.v,
           solid: false,
           r: 0
         });
       }
+    }
+
+    /* Corner gun sits on the wall MACRO cell — not a full guard-room stamp. */
+    function towerFootAt(x, y) {
+      var t = map.tile;
+      var macro = map.macro || 3;
+      var tx = Math.floor(x / t);
+      var ty = Math.floor(y / t);
+      var ax = Math.floor(tx / macro) * macro;
+      var ay = Math.floor(ty / macro) * macro;
+      var side = t * macro * 1.05;
+      return {
+        x: (ax + macro * 0.5) * t,
+        y: (ay + macro * 0.5) * t,
+        half: side * 0.42
+      };
+    }
+
+    function towerFoot(e) {
+      return towerFootAt(e.x, e.y);
+    }
+
+    function towerBlocked(x, y, radius) {
+      var i;
+      for (i = 0; i < enemies.length; i++) {
+        var e = enemies[i];
+        if (e.kind !== "tower") continue;
+        var foot = towerFoot(e);
+        var nx = Math.max(foot.x - foot.half, Math.min(x, foot.x + foot.half));
+        var ny = Math.max(foot.y - foot.half, Math.min(y, foot.y + foot.half));
+        var dx = x - nx;
+        var dy = y - ny;
+        if (dx * dx + dy * dy < radius * radius) return true;
+      }
+      return false;
     }
 
     function propBlocked(x, y, radius) {
@@ -297,6 +414,13 @@
         if (!d.solid || !d.r) continue;
         if (Math.hypot(x - d.x, y - d.y) < radius + d.r) return true;
       }
+      if (map && map.creditCrates) {
+        for (i = 0; i < map.creditCrates.length; i++) {
+          var box = map.creditCrates[i];
+          if (box.taken) continue;
+          if (Math.hypot(x - box.x, y - box.y) < radius + 12) return true;
+        }
+      }
       return false;
     }
 
@@ -305,9 +429,12 @@
       patchHold = 0;
       breached = [];
       sectorIndex = index;
+      applyDeckTheme(index);
       map = window.GameMap.cloneSector(index);
       floorList = window.GameMap.floorCells(map);
       buildFloorDecor();
+      minimapCache = null;
+      minimapCacheKey = "";
       inventory = { R: false, G: false, B: false };
       player.x = map.start.x;
       player.y = map.start.y;
@@ -319,15 +446,25 @@
       spawnWait = 1.4 * mods.spawn;
       spawnEvery = SPAWN_START * mods.spawn;
       if (!keepGear) {
-        owned = { pistol: true, shotgun: false, rifle: false, dash: false, hull: false };
+        owned = {
+          pistol: true, shotgun: false, smg: false, rifle: false, lance: false,
+          dash: false, hull: false
+        };
         breachCharges = 0;
         weaponId = "pistol";
         ammo = Math.round(AMMO_START * mods.ammo);
       }
       var i;
+      var mapFrac = mods.mapSpawn == null ? 1 : mods.mapSpawn;
+      var mapStep = mapFrac >= 0.99 ? 1 : Math.max(2, Math.round(1 / Math.max(0.2, mapFrac)));
       for (i = 0; i < map.spawns.length; i++) {
         var s = map.spawns[i];
+        if (s.kind !== "boss" && mapStep > 1 && (i % mapStep) !== 0) continue;
         enemies.push(readyEnemy(makeEnemy(s.x, s.y, s.kind)));
+      }
+      for (i = 0; i < (map.towers || []).length; i++) {
+        var tw = map.towers[i];
+        enemies.push(readyEnemy(makeEnemy(tw.x, tw.y, "tower")));
       }
       updateCamera();
       showToast(sectorIndex === 0 ? "Crash site — grab the keycard" : map.name);
@@ -351,8 +488,36 @@
       e.post = best || { x: e.x, y: e.y };
     }
 
+    function pushOutOfWalls(ent, radius) {
+      if (!blockedAt(ent.x, ent.y, radius)) return;
+      var step = Math.max(4, map.tile * 0.35);
+      var best = null;
+      var bestD = Infinity;
+      var ring;
+      for (ring = 1; ring <= 8; ring++) {
+        var ang;
+        for (ang = 0; ang < 16; ang++) {
+          var a = (ang / 16) * Math.PI * 2;
+          var nx = ent.x + Math.cos(a) * step * ring;
+          var ny = ent.y + Math.sin(a) * step * ring;
+          if (blockedAt(nx, ny, radius)) continue;
+          var d = Math.hypot(nx - ent.x, ny - ent.y);
+          if (d < bestD) {
+            bestD = d;
+            best = { x: nx, y: ny };
+          }
+        }
+        if (best) break;
+      }
+      if (best) {
+        ent.x = best.x;
+        ent.y = best.y;
+      }
+    }
+
     function readyEnemy(e) {
       if (e.kind === "fortress") assignPost(e);
+      if (e.kind !== "tower") pushOutOfWalls(e, e.r);
       return e;
     }
 
@@ -361,7 +526,9 @@
       mods = window.GameSettings.difficultyMods(window.GameSettings.getDifficulty());
       continueMode = !!opts.continueRun;
       score = 0;
-      hp = MAX_HP;
+      maxHp = MAX_HP + (mods.bonusHp | 0);
+      hp = maxHp;
+      hurtBank = 0;
       iframes = 0;
       fireWait = 0;
       over = false;
@@ -379,38 +546,63 @@
         return;
       }
       if (continueMode) {
-        owned = {
-          pistol: true,
-          shotgun: !!progress.owned.shotgun,
-          rifle: !!progress.owned.rifle,
-          dash: false,
-          hull: false
-        };
+        owned = Object.assign(normalizeGunOwned(progress.owned), { dash: false, hull: false });
         breachCharges = 0;
-        weaponId = owned.rifle ? "rifle" : owned.shotgun ? "shotgun" : "pistol";
+        weaponId = preferWeapon(owned, null);
         ammo = Math.round(AMMO_START * mods.ammo);
         loadSector(Math.min(progress.unlockedSector, window.GameMap.sectorCount() - 1), true);
       } else {
         window.GameSettings.write({ clearSuspended: true });
-        loadSector(0, false);
+        /* Guns stay unlocked across runs; dash / hull / breach reset. */
+        owned = Object.assign(normalizeGunOwned(progress.owned), { dash: false, hull: false });
+        breachCharges = 0;
+        weaponId = preferWeapon(owned, null);
+        ammo = Math.round(AMMO_START * mods.ammo);
+        loadSector(0, true);
       }
+    }
+
+    function clampCameraTarget(tx, ty) {
+      if (map.width < w) tx = (map.width - w) * 0.5;
+      else tx = Math.max(0, Math.min(map.width - w, tx));
+      if (map.height < h) ty = (map.height - h) * 0.5;
+      else ty = Math.max(0, Math.min(map.height - h, ty));
+      return { x: tx, y: ty };
     }
 
     function updateCamera() {
       if (!map) return;
-      camX = player.x - w * 0.5;
-      camY = player.y - h * 0.5;
-      camX = Math.max(0, Math.min(map.width - w, camX));
-      camY = Math.max(0, Math.min(map.height - h, camY));
-      if (map.width < w) camX = (map.width - w) * 0.5;
-      if (map.height < h) camY = (map.height - h) * 0.5;
+      /* Locked to the pilot. A catch-up follow reads as jitter. */
+      var target = clampCameraTarget(player.x - w * 0.5, player.y - h * 0.5);
+      camX = target.x;
+      camY = target.y;
+    }
+
+    function blockedAt(x, y, radius) {
+      return window.GameMap.circleBlocked(map, x, y, radius) ||
+        propBlocked(x, y, radius) ||
+        towerBlocked(x, y, radius);
     }
 
     function moveCircle(ent, dx, dy, radius) {
-      var nx = ent.x + dx;
-      if (!window.GameMap.circleBlocked(map, nx, ent.y, radius) && !propBlocked(nx, ent.y, radius)) ent.x = nx;
-      var ny = ent.y + dy;
-      if (!window.GameMap.circleBlocked(map, ent.x, ny, radius) && !propBlocked(ent.x, ny, radius)) ent.y = ny;
+      /* Try the full step first so diagonal motion does not stutter on one axis. */
+      if (dx || dy) {
+        var fx = ent.x + dx;
+        var fy = ent.y + dy;
+        if (!blockedAt(fx, fy, radius)) {
+          ent.x = fx;
+          ent.y = fy;
+          return;
+        }
+      }
+      if (dx) {
+        var nx = ent.x + dx;
+        if (!blockedAt(nx, ent.y, radius)) ent.x = nx;
+      }
+      if (dy) {
+        var ny = ent.y + dy;
+        if (!blockedAt(ent.x, ny, radius)) ent.y = ny;
+      }
     }
 
     function randomFloorAwayFromPlayer(minDist) {
@@ -421,23 +613,31 @@
         if (tile.outdoor) continue;
         var x = (cell.x + 0.5) * map.tile;
         var y = (cell.y + 0.5) * map.tile;
-        if (propBlocked(x, y, 16)) continue;
+        if (propBlocked(x, y, 16) || towerBlocked(x, y, 16)) continue;
+        if (window.GameMap.circleBlocked(map, x, y, 18)) continue;
         if (Math.hypot(x - player.x, y - player.y) >= minDist) return { x: x, y: y };
       }
       return null;
     }
 
+    function mobileEnemyCount() {
+      var n = 0;
+      var i;
+      for (i = 0; i < enemies.length; i++) {
+        if (enemies[i].kind !== "tower") n++;
+      }
+      return n;
+    }
+
     function spawnEnemy(kind) {
+      if (mobileEnemyCount() >= (mods.maxEnemies || 12)) return;
       var spot = randomFloorAwayFromPlayer(map.tile * 5);
       if (!spot) return;
-      var roll = Math.random();
       var k = kind;
-      if (!k) {
+      /* Only Dave's robot + drone sheets for wave spawns. No procedural crawlers. */
+      if (!k || k === "crawler" || k === "runner" || k === "fortress") {
         var t = sectorIndex / Math.max(1, window.GameMap.sectorCount() - 1);
-        if (roll < 0.06 + t * 0.12) k = "fortress";
-        else if (roll < 0.16 + t * 0.18) k = "drone";
-        else if (roll < 0.36 + t * 0.2) k = "crawler";
-        else k = "grunt";
+        k = Math.random() < 0.32 + t * 0.2 ? "drone" : "grunt";
       }
       enemies.push(readyEnemy(makeEnemy(spot.x, spot.y, k)));
     }
@@ -494,18 +694,32 @@
 
     function hurt(amount) {
       if (iframes > 0) return;
-      if (hp - amount <= 0 && owned.hull) {
+      var scale = mods.damageTaken == null ? 1 : mods.damageTaken;
+      var iframeMul = mods.iframeScale || 1;
+      hurtBank += amount * scale;
+      var dmg = Math.floor(hurtBank + 1e-9);
+      if (dmg < 1) {
+        /* Partial hit on easy/medium — flinch, no heart lost yet. */
+        iframes = IFRAMES * 0.45 * iframeMul;
+        flash = 0.12;
+        shake = 0.12;
+        sfx("thud");
+        return;
+      }
+      hurtBank -= dmg;
+      if (hp - dmg <= 0 && owned.hull) {
         owned.hull = false;
         hp = 2;
-        iframes = 1.2;
+        hurtBank = 0;
+        iframes = 1.2 * iframeMul;
         flash = 0.3;
         shake = 0.35;
         showToast("Hull patch caught it");
         sfx("hurt");
         return;
       }
-      hp -= amount;
-      iframes = IFRAMES;
+      hp -= dmg;
+      iframes = IFRAMES * iframeMul;
       flash = 0.25;
       shake = 0.3;
       sfx("hurt");
@@ -563,6 +777,10 @@
       });
     }
 
+    function enemyFireGap(base) {
+      return base * (mods.fireScale || 1);
+    }
+
     function stepEnemy(e, dt) {
       var edx = player.x - e.x;
       var edy = player.y - e.y;
@@ -578,7 +796,7 @@
         else moveCircle(e, -ny * spd * 0.7 * dt, nx * spd * 0.7 * dt, e.r);
         e.fireCool -= dt;
         if (e.fireCool <= 0 && elen < 340 && clearLine(e.x, e.y, player.x, player.y)) {
-          e.fireCool = 1.35;
+          e.fireCool = enemyFireGap(1.35);
           pushShot(e, nx, ny, 260, 3.5, 1, 1.4);
         }
         return;
@@ -588,6 +806,31 @@
         var wall = wallNormal(e);
         var dir = crawlerVector(player.x, player.y, e.x, e.y, wall ? wall.x : 0, wall ? wall.y : 0);
         moveCircle(e, dir.x * spd * dt, dir.y * spd * dt, e.r);
+        return;
+      }
+
+      if (e.kind === "tower") {
+        e.planted = true;
+        e.fireCool -= dt;
+        var foot = towerFoot(e);
+        var ang = Math.atan2(player.y - foot.y, player.x - foot.x);
+        var mx = foot.x + Math.cos(ang) * (foot.half + 12);
+        var my = foot.y + Math.sin(ang) * (foot.half + 12);
+        var mdx = player.x - mx;
+        var mdy = player.y - my;
+        var mlen = Math.hypot(mdx, mdy) || 1;
+        if (e.fireCool <= 0 && mlen < 420 && mlen > 28 && clearLine(mx, my, player.x, player.y)) {
+          e.fireCool = enemyFireGap(1.45);
+          enemyShots.push({
+            x: mx,
+            y: my,
+            vx: (mdx / mlen) * 240,
+            vy: (mdy / mlen) * 240,
+            life: 1.5,
+            r: 4,
+            dmg: 1
+          });
+        }
         return;
       }
 
@@ -606,14 +849,20 @@
         if (e.planted) {
           e.fireCool -= dt;
           if (fortressShouldFire(elen, true, e.fireCool) && clearLine(e.x, e.y, player.x, player.y)) {
-            e.fireCool = 1.7;
+            e.fireCool = enemyFireGap(1.7);
             pushShot(e, nx, ny, 200, 5, 2, 1.6);
           }
         }
         return;
       }
 
+      /* Grunts (Dave's robots): chase and shoot. */
       moveCircle(e, nx * spd * dt, ny * spd * dt, e.r);
+      e.fireCool -= dt;
+      if (e.fireCool <= 0 && elen < 300 && clearLine(e.x, e.y, player.x, player.y)) {
+        e.fireCool = enemyFireGap(1.15);
+        pushShot(e, nx, ny, 280, 3.2, 1, 1.25);
+      }
     }
 
     function useBreach() {
@@ -673,7 +922,9 @@
         owned: {
           pistol: true,
           shotgun: !!owned.shotgun,
+          smg: !!owned.smg,
           rifle: !!owned.rifle,
+          lance: !!owned.lance,
           dash: !!owned.dash,
           hull: !!owned.hull
         },
@@ -689,6 +940,7 @@
         doorsOpen: map.doors.map(function (d) { return !!map.tiles[d.y][d.x].open; }),
         keysTaken: map.keys.map(function (k) { return !!k.taken; }),
         cratesTaken: map.ammoCrates.map(function (c) { return !!c.taken; }),
+        creditsTaken: (map.creditCrates || []).map(function (c) { return !!c.taken; }),
         cachesTaken: (map.caches || []).map(function (c) { return !!c.taken; }),
         breached: breached.map(function (c) { return { x: c.x, y: c.y }; }),
         breachCharges: breachCharges,
@@ -708,6 +960,11 @@
       for (i = 0; i < snap.cratesTaken.length && i < map.ammoCrates.length; i++) {
         map.ammoCrates[i].taken = !!snap.cratesTaken[i];
       }
+      if (snap.creditsTaken && map.creditCrates) {
+        for (i = 0; i < snap.creditsTaken.length && i < map.creditCrates.length; i++) {
+          map.creditCrates[i].taken = !!snap.creditsTaken[i];
+        }
+      }
       for (i = 0; i < snap.cachesTaken.length && i < (map.caches || []).length; i++) {
         map.caches[i].taken = !!snap.cachesTaken[i];
       }
@@ -723,14 +980,18 @@
     }
 
     function restoreRun(snap) {
+      maxHp = MAX_HP + (mods.bonusHp | 0);
+      hurtBank = 0;
       score = snap.score;
-      hp = snap.hp;
+      hp = Math.min(maxHp, snap.hp);
       ammo = snap.ammo;
       weaponId = snap.weaponId;
       owned = {
         pistol: true,
         shotgun: !!snap.owned.shotgun,
+        smg: !!snap.owned.smg,
         rifle: !!snap.owned.rifle,
+        lance: !!snap.owned.lance,
         dash: !!snap.owned.dash,
         hull: !!snap.owned.hull
       };
@@ -741,6 +1002,7 @@
       dashLeft = 0;
       dashCool = 0;
       sectorIndex = snap.patchRun ? 0 : snap.sectorIndex;
+      applyDeckTheme(sectorIndex);
       map = window.GameMap.cloneSector(sectorIndex);
       floorList = window.GameMap.floorCells(map);
       buildFloorDecor();
@@ -812,11 +1074,13 @@
         score: score,
         ammo: ammo,
         hp: hp,
-        maxHp: MAX_HP,
+        maxHp: maxHp,
         owned: {
           pistol: true,
           shotgun: !!owned.shotgun,
+          smg: !!owned.smg,
           rifle: !!owned.rifle,
+          lance: !!owned.lance,
           dash: !!owned.dash,
           hull: !!owned.hull
         },
@@ -869,12 +1133,12 @@
         sfx("shop");
         persistProgress();
       } else if (item.kind === "heal") {
-        if (hp >= MAX_HP) {
+        if (hp >= maxHp) {
           showToast("HP full");
           return shopSnapshot();
         }
         score -= item.cost;
-        hp = Math.min(MAX_HP, hp + 1);
+        hp = Math.min(maxHp, hp + 1);
         showToast("Vitals restored");
         sfx("shop");
       } else if (item.kind === "gear") {
@@ -947,7 +1211,9 @@
 
       if (input.weapon1 && owned.pistol) weaponId = "pistol";
       if (input.weapon2 && owned.shotgun) weaponId = "shotgun";
-      if (input.weapon3 && owned.rifle) weaponId = "rifle";
+      if (input.weapon3 && owned.smg) weaponId = "smg";
+      if (input.weapon4 && owned.rifle) weaponId = "rifle";
+      if (input.weapon5 && owned.lance) weaponId = "lance";
 
       if (input.breach) useBreach();
 
@@ -984,7 +1250,7 @@
         );
       }
 
-      var opened = window.GameMap.tryOpenDoor(map, inventory, player.x, player.y, PLAYER_R);
+      var opened = window.GameMap.tryOpenDoor(map, inventory, player.x, player.y, DOOR_OPEN_R);
       if (opened) {
         showToast(opened === "R" ? "Red door unlocked" :
           opened === "G" ? "Green door unlocked" : "Blue door unlocked");
@@ -1033,6 +1299,7 @@
         }
       }
 
+
       if (input.autoAim) {
         var autoTarget = nearestEnemy(player.x, player.y, AUTO_AIM_RANGE);
         if (autoTarget) {
@@ -1057,7 +1324,49 @@
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         b.life -= dt;
-        if (b.life <= 0 || window.GameMap.circleBlocked(map, b.x, b.y, b.r) || propBlocked(b.x, b.y, b.r)) {
+        var cracked = false;
+        /* Towers / enemies first so wall guards are not shielded by the wall tile. */
+        var ei;
+        for (ei = enemies.length - 1; ei >= 0 && !cracked; ei--) {
+          var be = enemies[ei];
+          if (be.kind === "tower") {
+            var tf = towerFoot(be);
+            var hx = Math.max(tf.x - tf.half, Math.min(b.x, tf.x + tf.half));
+            var hy = Math.max(tf.y - tf.half, Math.min(b.y, tf.y + tf.half));
+            if ((b.x - hx) * (b.x - hx) + (b.y - hy) * (b.y - hy) >= b.r * b.r) continue;
+          } else if (!circlesHit(b.x, b.y, b.r, be.x, be.y, be.r)) continue;
+          be.hp -= b.dmg;
+          hitMarks.push({ x: be.x, y: be.y, life: 0.25 });
+          sfx("hit");
+          cracked = true;
+          if (be.hp <= 0) {
+            score += be.score + sectorIndex;
+            enemies.splice(ei, 1);
+          }
+          break;
+        }
+        if (!cracked && map.creditCrates) {
+          var ci;
+          for (ci = 0; ci < map.creditCrates.length; ci++) {
+            var box = map.creditCrates[ci];
+            if (box.taken) continue;
+            if (circlesHit(b.x, b.y, b.r, box.x, box.y, 14)) {
+              box.taken = true;
+              score += box.credits || 8;
+              hitMarks.push({ x: box.x, y: box.y, life: 0.3 });
+              showToast("+" + (box.credits || 8) + " credits");
+              sfx("hit");
+              cracked = true;
+              break;
+            }
+          }
+        }
+        if (
+          cracked ||
+          b.life <= 0 ||
+          window.GameMap.circleBlocked(map, b.x, b.y, b.r, true) ||
+          propBlocked(b.x, b.y, b.r)
+        ) {
           bullets.splice(i, 1);
         }
       }
@@ -1094,10 +1403,11 @@
       for (i = enemies.length - 1; i >= 0; i--) {
         var e = enemies[i];
         stepEnemy(e, dt);
+        if (e.kind !== "tower") pushOutOfWalls(e, e.r);
 
         if (e.kind === "boss") {
           e.spawnCool -= dt;
-          if (e.spawnCool <= 0 && enemies.length < 14) {
+          if (e.spawnCool <= 0 && mobileEnemyCount() < (mods.maxEnemies || 12)) {
             e.spawnCool = 3.2;
             spawnEnemy(Math.random() < 0.5 ? "grunt" : "drone");
             showToast("Bay defenders");
@@ -1124,6 +1434,7 @@
 
         if (
           e.kind !== "drone" &&
+          e.kind !== "tower" &&
           circlesHit(e.x, e.y, e.r, player.x, player.y, PLAYER_R)
         ) {
           hurt(e.kind === "boss" || e.kind === "fortress" ? 2 : 1);
@@ -1154,7 +1465,7 @@
         }
       }
 
-      updateCamera();
+      updateCamera(dt);
     }
 
     function drawStick(stick, radius, labelColour) {
@@ -1208,11 +1519,19 @@
 
     function drawHpBar(e) {
       if (e.kind !== "boss" && e.maxHp <= 1) return;
+      var hx = e.x;
+      var hy = e.y - e.r - 10;
       var bw = e.r * 2;
+      if (e.kind === "tower" && map) {
+        var foot = towerFoot(e);
+        hx = foot.x;
+        hy = foot.y - foot.half - 8;
+        bw = 36;
+      }
       ctx.fillStyle = "#111";
-      ctx.fillRect(e.x - bw / 2, e.y - e.r - 10, bw, 4);
+      ctx.fillRect(hx - bw / 2, hy, bw, 4);
       ctx.fillStyle = ORANGE;
-      ctx.fillRect(e.x - bw / 2, e.y - e.r - 10, bw * (e.hp / e.maxHp), 4);
+      ctx.fillRect(hx - bw / 2, hy, bw * (e.hp / e.maxHp), 4);
     }
 
     function rivetAt(x, y, r) {
@@ -1282,9 +1601,26 @@
       ctx.closePath();
     }
 
+    function drawDirSprite(img, drawH) {
+      var aspect = img.naturalWidth / Math.max(1, img.naturalHeight);
+      var dh = drawH;
+      var dw = dh * aspect;
+      ctx.drawImage(img, -dw * 0.5, -dh * 0.5, dw, dh);
+    }
+
     function drawPlayerBody() {
-      // Built facing +X. The caller turns this to the aim. Light is added in screen space.
-      ctx.scale(1.22, 1.22);
+      /* 8-dir frames are pre-rotated art — do not also rotate the canvas. */
+      var pFrame = pilotFrames[dir8(player.facing)];
+      if (readyImg(pFrame)) {
+        drawDirSprite(pFrame, 42);
+        return;
+      }
+      if (readyImg(pilotArt)) {
+        drawDirSprite(pilotArt, 42);
+        return;
+      }
+      /* Pilot scale — independent of the fine wall grid. */
+      ctx.scale(0.88, 0.88);
 
       ctx.fillStyle = "#6b4a32";
       ctx.beginPath();
@@ -1353,7 +1689,13 @@
       ctx.lineWidth = 1;
     }
 
-    function drawGrunt(e) {
+    function drawGrunt(e, facing) {
+      var ang = facing == null ? 0 : facing;
+      var frame = robotFrames[ROBOT_DIR_MAP[dir8(ang)]];
+      if (readyImg(frame)) {
+        drawDirSprite(frame, Math.max(34, e.r * 2.9));
+        return;
+      }
       var s = Math.max(0.95, e.r / 11);
       ctx.save();
       ctx.scale(s, s);
@@ -1521,7 +1863,12 @@
       }
     }
 
-    function drawDrone(e) {
+    function drawDrone(e, facing) {
+      var frame = droneFrames[dir8(facing == null ? 0 : facing)];
+      if (readyImg(frame)) {
+        drawDirSprite(frame, Math.max(30, e.r * 2.8));
+        return;
+      }
       var r = e.r;
       ctx.fillStyle = "#c4a06a";
       ctx.beginPath();
@@ -1616,25 +1963,225 @@
     }
 
     function drawEnemy(e) {
+      if (e.kind === "tower") {
+        drawTower(e);
+        drawHpBar(e);
+        return;
+      }
       var facing = Math.atan2(player.y - e.y, player.x - e.x);
       var sh = shadowFor(e);
       castShadow(e.x, e.y, sh[0], sh[1]);
       ctx.save();
       ctx.translate(e.x, e.y);
-      ctx.rotate(facing);
-      if (e.kind === "crawler") drawCrawler(e);
-      else if (e.kind === "fortress") drawFortress(e);
-      else if (e.kind === "drone") drawDrone(e);
-      else if (e.kind === "boss") drawBoss(e);
-      else drawGrunt(e);
+      if (e.kind === "drone" && readyImg(droneFrames[dir8(facing)])) {
+        drawDrone(e, facing);
+      } else if (e.kind === "grunt" && readyImg(robotFrames[ROBOT_DIR_MAP[dir8(facing)]])) {
+        drawGrunt(e, facing);
+      } else {
+        ctx.rotate(facing);
+        if (e.kind === "fortress") drawFortress(e);
+        else if (e.kind === "drone") drawDrone(e, facing);
+        else if (e.kind === "boss") drawBoss(e);
+        else drawGrunt(e, facing);
+      }
       ctx.restore();
-      if (e.kind === "grunt") drawGruntLamp(e);
+      if (e.kind === "grunt" && !readyImg(robotFrames[0])) drawGruntLamp(e);
       else if (e.kind === "fortress" || e.kind === "boss") drawFortressCore(e);
       else if (e.kind === "drone") drawDroneBeam(e, facing);
       drawHpBar(e);
     }
 
     var platePattern = null;
+    var yardPattern = null;
+    var concretePattern = null;
+    var wallConcretePattern = null;
+    var groundIn = [];
+    var groundOut = [];
+    var wallArt = null;
+    var wallVert = null;
+    var wallVertClean = null;
+    var wallVertCracked = null;
+    var joinL = null;
+    var joinLClean = null;
+    var joinLCracked = null;
+    var joinT = null;
+    var joinX = null;
+    var towerArt = null;
+    var floorArt = null;
+    var floorsByKey = { concrete: null, plate: null, plate2: null, plate3: null };
+    var grassArt = null;
+    var junkRubble = null;
+    var junkGravel = null;
+    var junkDrain = null;
+    var propArts = Object.create(null);
+    var shipArt = null;
+    var robotArt = null;
+    var robotFrames = [];
+    var pilotArt = null;
+    var pilotFrames = [];
+    var droneFrames = [];
+    var cannonFrames = [];
+    /* robot sheet rows top→bottom: S SW W NW N NE E SE → map dir8(N..) index */
+    var ROBOT_DIR_MAP = [4, 5, 6, 7, 0, 1, 2, 3];
+    var grassStamp = null;
+    var floorStamp = null;
+    var cornerArt = null;
+    var doorArt = null;
+    var crateArt = null;
+    var barrelArt = null;
+    var deckCracked = false;
+
+    function loadImg(file, done) {
+      if (typeof Image === "undefined") return;
+      var img = new Image();
+      img.onload = function () {
+        if (done) done(img);
+        /* Menu paints once before textures arrive — refresh when art lands. */
+        if (!playing && !map) paintMenuBackdrop();
+      };
+      img.onerror = function () {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("texture failed:", file);
+        }
+      };
+      img.src = "static/textures/" + file;
+    }
+
+    /* Art cut from docs/ — floors and walls swap per deck. */
+    (function loadGroundParts() {
+      var i;
+      for (i = 0; i < 8; i++) {
+        loadImg("in-" + i + ".png", function (img) { groundIn.push(img); });
+        loadImg("out-" + i + ".png", function (img) { groundOut.push(img); });
+        (function (idx) {
+          loadImg("drone-" + idx + ".png", function (img) { droneFrames[idx] = img; });
+          loadImg("cannon-" + idx + ".png", function (img) { cannonFrames[idx] = img; });
+          loadImg("robot-dir-" + idx + ".png", function (img) { robotFrames[idx] = img; });
+          loadImg("pilot-dir-" + idx + ".png", function (img) { pilotFrames[idx] = img; });
+        })(i);
+      }
+      loadImg("wall-straight.png", function (img) { wallArt = img; });
+      loadImg("wall-vert.png", function (img) {
+        wallVertClean = img;
+        if (!wallVert) wallVert = img;
+      });
+      loadImg("wall-cracked-vert.png", function (img) { wallVertCracked = img; });
+      loadImg("join-l1.png", function (img) {
+        joinLClean = img;
+        if (!joinL) joinL = img;
+      });
+      loadImg("join-cracked.png", function (img) { joinLCracked = img; });
+      loadImg("join-t.png", function (img) { joinT = img; });
+      loadImg("join-x.png", function (img) { joinX = img; });
+      loadImg("guard-body.png", function (img) { towerArt = img; });
+      loadImg("floor-concrete.jpg", function (img) {
+        floorsByKey.concrete = img;
+        if (!floorArt) floorArt = img;
+        floorStamp = null;
+      });
+      loadImg("floor-plate.jpg", function (img) { floorsByKey.plate = img; floorStamp = null; });
+      loadImg("floor-plate2.jpg", function (img) { floorsByKey.plate2 = img; });
+      loadImg("floor-plate3.jpg", function (img) { floorsByKey.plate3 = img; });
+      loadImg("grass.jpg", function (img) { grassArt = img; grassStamp = null; });
+      loadImg("junk-rubble.png", function (img) { junkRubble = img; });
+      loadImg("junk-gravel.png", function (img) { junkGravel = img; });
+      loadImg("junk-drain.png", function (img) { junkDrain = img; });
+      [
+        "bricks", "broken", "bucket", "cans", "cracks", "crates",
+        "foot", "hose", "lights", "tools", "tyre", "wood", "tin", "sandbag"
+      ].forEach(function (name) {
+        loadImg("prop-" + name + ".png", function (img) { propArts[name] = img; });
+      });
+      loadImg("wall-corner.png", function (img) { cornerArt = img; });
+      loadImg("wall-door.png", function (img) { doorArt = img; });
+      loadImg("crate.png", function (img) { crateArt = img; });
+      loadImg("barrel.png", function (img) { barrelArt = img; });
+      loadImg("ship-crashed.png", function (img) { shipArt = img; });
+      loadImg("enemy-robot1.png", function (img) { robotArt = img; });
+      loadImg("pilot-dir-2.png", function (img) {
+        pilotArt = img;
+        if (!pilotFrames[2]) pilotFrames[2] = img;
+      });
+    })();
+
+    function readyImg(img) {
+      return !!(img && img.complete && img.naturalWidth);
+    }
+
+    /* Different floor + wall set each deck. */
+    function applyDeckTheme(index) {
+      var floorKeys = ["concrete", "plate", "plate2", "plate3"];
+      var key = floorKeys[((index % floorKeys.length) + floorKeys.length) % floorKeys.length];
+      floorArt = floorsByKey[key] || floorsByKey.concrete || floorArt;
+      floorStamp = null;
+      deckCracked = Math.floor(index / 5) % 2 === 1;
+      wallVert = deckCracked && wallVertCracked ? wallVertCracked : (wallVertClean || wallVert);
+      joinL = deckCracked && joinLCracked ? joinLCracked : (joinLClean || joinL);
+    }
+
+    function dir8(ang) {
+      var a = ang + Math.PI * 0.5;
+      if (a < 0) a += Math.PI * 2;
+      return Math.round(a / (Math.PI * 0.25)) % 8;
+    }
+
+    function bakeStamp(src, size) {
+      if (!readyImg(src) || typeof document === "undefined" || !document.createElement) return null;
+      var c = document.createElement("canvas");
+      c.width = size;
+      c.height = size;
+      var g = c.getContext("2d");
+      g.imageSmoothingEnabled = true;
+      g.drawImage(src, 0, 0, src.naturalWidth, src.naturalHeight, 0, 0, size, size);
+      return c;
+    }
+
+    function stampBlock(stamp, px, py, span) {
+      if (!stamp) return false;
+      var prevSmooth = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(stamp, px, py, span, span);
+      ctx.imageSmoothingEnabled = prevSmooth;
+      return true;
+    }
+
+    function paintGroundPart(px, py, size, tx, ty, outdoor) {
+      if (!map) return false;
+      var macro = map.macro || 3;
+      var ax = Math.floor(tx / macro);
+      var ay = Math.floor(ty / macro);
+      var bx = ax * macro;
+      var by = ay * macro;
+      var span = size * macro;
+      /* One stamp per macro block. Pattern fillRect on full JPEGs kills FPS. */
+      if (tx !== bx || ty !== by) {
+        var origin = map.tiles[by] && map.tiles[by][bx];
+        if (origin && origin.kind !== "wall" && origin.kind !== "door" && !!origin.outdoor === !!outdoor) {
+          return true;
+        }
+      }
+      /* Outdoor crash site: cheap pre-scaled grass drawImage (not createPattern). */
+      if (outdoor) {
+        if (!grassStamp && readyImg(grassArt)) grassStamp = bakeStamp(grassArt, 96);
+        if (stampBlock(grassStamp, bx * size, by * size, span)) return true;
+      }
+      var list = outdoor ? groundOut : groundIn;
+      if (list.length) {
+        var img = list[Math.floor(tileHash(ax, ay, outdoor ? 2 : 4) * list.length) % list.length];
+        if (readyImg(img)) {
+          var prevSmooth = ctx.imageSmoothingEnabled;
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(img, 4, 4, img.naturalWidth - 8, img.naturalHeight - 8, bx * size, by * size, span, span);
+          ctx.imageSmoothingEnabled = prevSmooth;
+          return true;
+        }
+      }
+      if (!outdoor) {
+        if (!floorStamp && readyImg(floorArt)) floorStamp = bakeStamp(floorArt, 96);
+        if (stampBlock(floorStamp, bx * size, by * size, span)) return true;
+      }
+      return false;
+    }
 
     function stampTread(g, cx, cy) {
       g.save();
@@ -1656,40 +2203,185 @@
       g.lineTo(-2.7, -0.2);
       g.closePath();
       g.fill();
-      g.fillStyle = "rgba(255,250,236,0.9)";
-      g.beginPath();
-      g.moveTo(0, -4.6);
-      g.lineTo(1.5, -1.4);
-      g.lineTo(-1.5, -1.4);
-      g.closePath();
-      g.fill();
       g.restore();
+    }
+
+    function makeSheet(w, h) {
+      var doc = canvas.ownerDocument;
+      if (!doc || !doc.createElement) return null;
+      var sheet = doc.createElement("canvas");
+      sheet.width = w;
+      sheet.height = h;
+      return sheet;
     }
 
     function floorPlate() {
       if (platePattern) return platePattern;
-      var doc = canvas.ownerDocument;
-      if (!doc || !doc.createElement) return null;
-      var sheet = doc.createElement("canvas");
-      sheet.width = 36;
-      sheet.height = 28;
+      var sheet = makeSheet(36, 28);
+      if (!sheet) return null;
       var g = sheet.getContext("2d");
       g.fillStyle = "#b7a58c";
       g.fillRect(0, 0, 36, 28);
       stampTread(g, 9, 7);
       stampTread(g, 27, 7);
       stampTread(g, 18, 21);
-      stampTread(g, 0, 21);
-      stampTread(g, 36, 21);
       platePattern = ctx.createPattern(sheet, "repeat");
       return platePattern;
+    }
+
+    function yardGround() {
+      if (yardPattern) return yardPattern;
+      var sheet = makeSheet(128, 128);
+      if (!sheet) return null;
+      var g = sheet.getContext("2d");
+      var x;
+      var y;
+      g.fillStyle = "#3a3228";
+      g.fillRect(0, 0, 128, 128);
+      for (y = 0; y < 128; y += 2) {
+        for (x = 0; x < 128; x += 2) {
+          var h = ((x * 17 + y * 31) >>> 0) % 100;
+          if (h < 35) {
+            g.fillStyle = "rgba(" + (40 + h) + "," + (34 + (h % 20)) + "," + (26 + (h % 12)) + ",0.55)";
+            g.fillRect(x, y, 2, 2);
+          } else if (h > 88) {
+            g.fillStyle = "rgba(90,82,68,0.5)";
+            g.fillRect(x, y, 1, 1);
+          }
+        }
+      }
+      for (x = 0; x < 90; x++) {
+        g.fillStyle = x % 3 ? "rgba(110,100,85,0.55)" : "rgba(25,22,18,0.45)";
+        g.beginPath();
+        g.arc((x * 47) % 128, (x * 91) % 128, 0.6 + (x % 3) * 0.4, 0, Math.PI * 2);
+        g.fill();
+      }
+      for (x = 0; x < 8; x++) {
+        g.fillStyle = "rgba(55,48,38," + (0.2 + (x % 4) * 0.05) + ")";
+        g.beginPath();
+        g.ellipse((x * 37) % 128, (x * 53) % 128, 14 + x, 8, x * 0.4, 0, Math.PI * 2);
+        g.fill();
+      }
+      for (x = 0; x < 14; x++) {
+        var wx = (x * 29 + 10) % 128;
+        var wy = (x * 41 + 20) % 128;
+        g.fillStyle = "rgba(" + (36 + (x % 5) * 8) + "," + (92 + (x % 4) * 12) + ",32,0.55)";
+        g.beginPath();
+        g.ellipse(wx, wy, 5 + (x % 3), 3, -0.3, 0, Math.PI * 2);
+        g.fill();
+      }
+      yardPattern = ctx.createPattern(sheet, "repeat");
+      return yardPattern;
+    }
+
+    function concreteGround() {
+      if (concretePattern) return concretePattern;
+      var sheet = makeSheet(128, 128);
+      if (!sheet) return null;
+      var g = sheet.getContext("2d");
+      g.fillStyle = "#7a756e";
+      g.fillRect(0, 0, 128, 128);
+      var i;
+      for (i = 0; i < 128; i += 2) {
+        var j;
+        for (j = 0; j < 128; j += 2) {
+          var v = ((i * 13 + j * 19) >>> 0) % 40;
+          g.fillStyle = "rgba(" + (110 + v) + "," + (105 + v * 0.8) + "," + (98 + v * 0.6) + ",0.35)";
+          g.fillRect(i, j, 2, 2);
+        }
+      }
+      g.strokeStyle = "rgba(40,36,32,0.35)";
+      g.lineWidth = 2;
+      g.strokeRect(1, 1, 62, 62);
+      g.strokeRect(65, 1, 62, 62);
+      g.strokeRect(1, 65, 62, 62);
+      g.strokeRect(65, 65, 62, 62);
+      g.strokeStyle = "rgba(30,28,24,0.4)";
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.moveTo(12, 20); g.lineTo(40, 48); g.lineTo(58, 44);
+      g.moveTo(70, 80); g.lineTo(100, 110); g.lineTo(120, 95);
+      g.stroke();
+      g.fillStyle = "rgba(25,20,14,0.28)";
+      g.beginPath();
+      g.ellipse(96, 36, 18, 10, 0.4, 0, Math.PI * 2);
+      g.fill();
+      concretePattern = ctx.createPattern(sheet, "repeat");
+      return concretePattern;
+    }
+
+    function wallConcrete() {
+      if (wallConcretePattern) return wallConcretePattern;
+      var sheet = makeSheet(64, 64);
+      if (!sheet) return null;
+      var g = sheet.getContext("2d");
+      g.fillStyle = "#6a6662";
+      g.fillRect(0, 0, 64, 64);
+      g.fillStyle = "#5a5652";
+      g.fillRect(0, 0, 64, 20);
+      g.fillRect(0, 32, 64, 20);
+      g.strokeStyle = "rgba(25,22,20,0.55)";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(0, 21); g.lineTo(64, 21);
+      g.moveTo(0, 52); g.lineTo(64, 52);
+      g.moveTo(32, 0); g.lineTo(32, 21);
+      g.moveTo(16, 32); g.lineTo(16, 52);
+      g.moveTo(48, 32); g.lineTo(48, 52);
+      g.stroke();
+      wallConcretePattern = ctx.createPattern(sheet, "repeat");
+      return wallConcretePattern;
     }
 
     function drawFloorTile(px, py, size, tx, ty, outdoor) {
       var s = size + 0.6;
       var n = tileHash(tx, ty, 1);
       var n2 = tileHash(tx, ty, 2);
+      var n3 = tileHash(tx, ty, 3);
+      var macro = (map && map.macro) || 3;
+      if (size <= 18) {
+        if (paintGroundPart(px, py, size, tx, ty, outdoor)) return;
+        if (outdoor) {
+          ctx.fillStyle = yardGround() || "#3a3228";
+          ctx.fillRect(px - 1, py - 1, size + 2, size + 2);
+        } else {
+          ctx.fillStyle = concreteGround() || "#7a756e";
+          ctx.fillRect(px - 1, py - 1, size + 2, size + 2);
+        }
+        return;
+      }
       if (outdoor) {
+        if (sectorIndex === 0) {
+          /* Crash approach — grass, dirt patches, sparse blades. */
+          var g = 0.42 + n * 0.18;
+          ctx.fillStyle = "rgb(" + Math.floor(62 + n * 28) + "," + Math.floor(110 + g * 50) + "," + Math.floor(48 + n2 * 20) + ")";
+          /* Overlap neighbours so the floor grid does not read as big squares. */
+          ctx.fillRect(px - 2, py - 2, s + 3, s + 3);
+          ctx.fillStyle = "rgba(30,70,28," + (0.14 + n2 * 0.16) + ")";
+          ctx.beginPath();
+          ctx.ellipse(px + size * (0.3 + n * 0.4), py + size * (0.35 + n2 * 0.35), 10 + n * 10, 5 + n2 * 4, -0.4, 0, Math.PI * 2);
+          ctx.fill();
+          if (n3 > 0.55) {
+            ctx.fillStyle = "rgba(90,70,40," + (0.18 + n * 0.12) + ")";
+            ctx.beginPath();
+            ctx.ellipse(px + size * 0.6, py + size * 0.7, 8 + n2 * 6, 3.5, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.strokeStyle = "rgba(20,50,18," + (0.25 + n * 0.2) + ")";
+          ctx.lineWidth = 1.2;
+          var blades = 2 + Math.floor(n * 3);
+          var bi;
+          for (bi = 0; bi < blades; bi++) {
+            var bx = px + 6 + ((n * 40 + bi * 11) % (size - 10));
+            var by = py + 10 + ((n2 * 30 + bi * 9) % (size - 14));
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.quadraticCurveTo(bx + 1.5, by - 5, bx + (bi % 2 ? 3 : -2), by - 9 - n * 3);
+            ctx.stroke();
+          }
+          ctx.lineWidth = 1;
+          return;
+        }
         ctx.fillStyle = "#d2bc96";
         ctx.fillRect(px - 1, py - 1, s + 1, s + 1);
         ctx.fillStyle = "rgba(255,236,200," + (0.08 + (1 - n) * 0.08) + ")";
@@ -1714,7 +2406,32 @@
         return;
       }
       ctx.fillStyle = floorPlate() || "#b7a58c";
-      ctx.fillRect(px - 0.5, py - 0.5, size + 1, size + 1);
+      ctx.fillRect(px - 2, py - 2, size + 4, size + 4);
+      /* Extra plate wear: weld seam, grate, scuff. */
+      if (n > 0.62) {
+        ctx.strokeStyle = "rgba(40,28,16," + (0.18 + n2 * 0.2) + ")";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(px + 6, py + size * 0.5);
+        ctx.lineTo(px + size - 6, py + size * 0.5 + (n3 - 0.5) * 4);
+        ctx.stroke();
+      }
+      if (n2 > 0.78) {
+        ctx.strokeStyle = "rgba(26,18,12,0.35)";
+        ctx.lineWidth = 1;
+        var gx = px + 8;
+        var gy = py + 8;
+        var gi;
+        for (gi = 0; gi < 3; gi++) {
+          ctx.strokeRect(gx + gi * 10, gy, 8, 8);
+          ctx.strokeRect(gx + gi * 10, gy + 10, 8, 8);
+        }
+      } else if (n3 > 0.7) {
+        ctx.fillStyle = "rgba(60,40,20," + (0.08 + n * 0.08) + ")";
+        ctx.beginPath();
+        ctx.ellipse(px + size * 0.55, py + size * 0.6, 7 + n * 5, 3, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.lineWidth = 1;
     }
 
@@ -1725,6 +2442,11 @@
       if (d.kind === "ship") {
         drawCrashedShip();
       } else if (d.kind === "box") {
+        if (readyImg(crateArt)) {
+          ctx.drawImage(crateArt, -20, -20, 40, 40);
+          ctx.restore();
+          return;
+        }
         ctx.fillStyle = "rgba(0,0,0,0.3)";
         ctx.beginPath();
         ctx.ellipse(1, 4, 14, 8, 0, 0, Math.PI * 2);
@@ -1802,6 +2524,18 @@
         ctx.beginPath();
         ctx.ellipse(-3, -3, 3, 2, 0, 0, Math.PI * 2);
         ctx.fill();
+      } else if (d.kind === "rubble" || d.kind === "gravel" || d.kind === "drain") {
+        var litter = d.kind === "drain" ? junkDrain : d.kind === "gravel" ? junkGravel : junkRubble;
+        if (readyImg(litter)) {
+          var dw = d.kind === "drain" ? 52 : 44;
+          var dh = d.kind === "drain" ? 34 : 40;
+          ctx.drawImage(litter, -dw * 0.5, -dh * 0.5, dw, dh);
+        }
+      } else if (propArts[d.kind] && readyImg(propArts[d.kind])) {
+        var prop = propArts[d.kind];
+        var pw = d.kind === "lights" || d.kind === "foot" ? 36 : 42;
+        var ph = d.kind === "lights" ? 28 : d.kind === "foot" ? 48 : 40;
+        ctx.drawImage(prop, -pw * 0.5, -ph * 0.5, pw, ph);
       } else if (d.kind === "scrap") {
         ctx.fillStyle = "rgba(0,0,0,0.2)";
         ctx.beginPath();
@@ -1837,6 +2571,13 @@
     }
 
     function drawCrashedShip() {
+      if (readyImg(shipArt)) {
+        var smooth = ctx.imageSmoothingEnabled;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(shipArt, -70, -55, 140, 120);
+        ctx.imageSmoothingEnabled = smooth;
+        return;
+      }
       ctx.fillStyle = "rgba(20,12,8,0.4)";
       ctx.beginPath();
       ctx.ellipse(6, 22, 70, 20, 0.15, 0, Math.PI * 2);
@@ -1981,6 +2722,24 @@
     }
 
     function drawMetalDoor(px, py, size, colour) {
+      if (size <= 20) {
+        /* Thin door segment — matches wall beam, not a chunky lock panel. */
+        var door = ctx.createLinearGradient(px, py, px, py + size);
+        door.addColorStop(0, "#f8fafc");
+        door.addColorStop(0.35, colour || ORANGE);
+        door.addColorStop(1, "#1c1917");
+        ctx.fillStyle = door;
+        ctx.fillRect(px, py, size, size);
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.fillRect(px + 1, py + 2, size - 2, Math.max(2, size * 0.2));
+        ctx.strokeStyle = "#0c0e12";
+        ctx.lineWidth = 1.3;
+        ctx.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
+        ctx.fillStyle = "#0c0e12";
+        ctx.fillRect(px + size * 0.42, py + size * 0.28, size * 0.16, size * 0.44);
+        ctx.lineWidth = 1;
+        return;
+      }
       var s = size + 0.5;
       var plate = ctx.createLinearGradient(px, py, px, py + s);
       plate.addColorStop(0, "#efe0c4");
@@ -2017,11 +2776,6 @@
       rivetAt(px + s - 14, py + 12, 2.4);
       rivetAt(px + 14, py + s - 18, 2.4);
       rivetAt(px + s - 14, py + s - 18, 2.4);
-      var doorFace = ctx.createLinearGradient(px, py + s - 8, px, py + s);
-      doorFace.addColorStop(0, "#8a6244");
-      doorFace.addColorStop(1, "#3a2416");
-      ctx.fillStyle = doorFace;
-      ctx.fillRect(px + 2, py + s - 8, s - 4, 8);
       ctx.lineWidth = 1;
     }
 
@@ -2029,6 +2783,7 @@
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(-0.35);
+      ctx.scale(1.05, 1.05);
       ctx.fillStyle = "rgba(26,18,12,0.35)";
       roundPlate(-13, -7, 28, 18, 3);
       ctx.fill();
@@ -2051,8 +2806,13 @@
     }
 
     function drawAmmoCrate(x, y) {
+      if (readyImg(barrelArt)) {
+        ctx.drawImage(barrelArt, x - 16, y - 16, 32, 32);
+        return;
+      }
       ctx.save();
       ctx.translate(x, y);
+      ctx.scale(1.05, 1.05);
       ctx.fillStyle = "rgba(26,18,12,0.35)";
       roundPlate(-15, -10, 32, 26, 4);
       ctx.fill();
@@ -2083,6 +2843,152 @@
       rivetAt(11, -9, 1.8);
       rivetAt(-11, 8, 1.8);
       rivetAt(11, 8, 1.8);
+      ctx.lineWidth = 1;
+      ctx.restore();
+    }
+
+    function drawCreditCrate(x, y) {
+      if (readyImg(crateArt)) {
+        ctx.drawImage(crateArt, x - 18, y - 18, 36, 36);
+        return;
+      }
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(1.08, 1.08);
+      ctx.fillStyle = "rgba(26,18,12,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(1, 7, 14, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      var scrap = ctx.createLinearGradient(-14, -12, 14, 12);
+      scrap.addColorStop(0, "#f0e2a0");
+      scrap.addColorStop(0.5, "#c9a227");
+      scrap.addColorStop(1, "#7a5c12");
+      ctx.fillStyle = scrap;
+      roundPlate(-14, -12, 28, 24, 3);
+      ctx.fill();
+      ctx.strokeStyle = "#1a120c";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = "#1a120c";
+      ctx.fillRect(-14, -2, 28, 3);
+      ctx.fillRect(-2, -12, 4, 24);
+      ctx.fillStyle = "#fff7d6";
+      ctx.font = "800 10px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("CR", 0, 1);
+      ctx.strokeStyle = "#1a120c";
+      ctx.lineWidth = 1.2;
+      ctx.strokeText("CR", 0, 1);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      rivetAt(-10, -8, 1.5);
+      rivetAt(10, -8, 1.5);
+      ctx.lineWidth = 1;
+      ctx.restore();
+    }
+
+    function drawTowerCannon(cx, cy) {
+      var ang = Math.atan2(player.y - cy, player.x - cx);
+      var frame = cannonFrames[dir8(ang)];
+      if (readyImg(frame)) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        drawDirSprite(frame, 56);
+        ctx.restore();
+        return;
+      }
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(ang);
+      ctx.fillStyle = "#1c2128";
+      ctx.beginPath();
+      ctx.arc(0, 0, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#0c0e12";
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      var barrel = ctx.createLinearGradient(6, -5, 40, 5);
+      barrel.addColorStop(0, "#d7dde4");
+      barrel.addColorStop(1, "#2a3038");
+      ctx.fillStyle = barrel;
+      ctx.fillRect(8, -5, 34, 10);
+      ctx.strokeRect(8, -5, 34, 10);
+      ctx.fillStyle = ORANGE;
+      ctx.fillRect(38, -3, 9, 6);
+      ctx.strokeRect(38, -3, 9, 6);
+      ctx.restore();
+    }
+
+    function drawTower(e) {
+      /* Cannon on the corner wall only — skip the huge guard-body room art. */
+      if (map && (readyImg(cannonFrames[0]) || readyImg(towerArt))) {
+        var foot = towerFoot(e);
+        var pad = foot.half * 0.85;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(foot.x + 1, foot.y + pad * 0.55, pad * 0.95, pad * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#3a3f46";
+        ctx.beginPath();
+        ctx.arc(foot.x, foot.y, pad * 0.72, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#12151a";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        drawTowerCannon(foot.x, foot.y);
+        return;
+      }
+      var ang = Math.atan2(player.y - e.y, player.x - e.x);
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      castShadow(0, 0, 18, 11);
+      var steel = ctx.createLinearGradient(-16, -18, 16, 16);
+      steel.addColorStop(0, "#d7dde4");
+      steel.addColorStop(0.45, "#7b8794");
+      steel.addColorStop(1, "#2a3038");
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(1, 12, 17, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = steel;
+      ctx.beginPath();
+      ctx.moveTo(-15, 10);
+      ctx.lineTo(-12, -10);
+      ctx.lineTo(12, -10);
+      ctx.lineTo(15, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#0c0e12";
+      ctx.lineWidth = 2.6;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -2, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      rivetAt(-8, -7, 1.7);
+      rivetAt(8, -7, 1.7);
+      rivetAt(-9, 5, 1.7);
+      rivetAt(9, 5, 1.7);
+      ctx.save();
+      ctx.rotate(ang);
+      var barrel = ctx.createLinearGradient(4, -4, 26, 4);
+      barrel.addColorStop(0, "#c5ced6");
+      barrel.addColorStop(1, "#2a3038");
+      ctx.fillStyle = barrel;
+      ctx.fillRect(6, -4, 22, 8);
+      ctx.strokeRect(6, -4, 22, 8);
+      ctx.fillStyle = ORANGE;
+      ctx.fillRect(24, -2.5, 7, 5);
+      ctx.strokeRect(24, -2.5, 7, 5);
+      ctx.restore();
+      ctx.fillStyle = "#c2410c";
+      ctx.beginPath();
+      ctx.arc(0, -16, 3.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#0c0e12";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
       ctx.lineWidth = 1;
       ctx.restore();
     }
@@ -2133,33 +3039,48 @@
       var mh = 96;
       var mx = w - mw - 14;
       var my = 14;
-      var cellW = mw / map.cols;
-      var cellH = mh / map.rows;
-      roundPlate(mx - 4, my - 4, mw + 16, mh + 16, 8);
-      ctx.fillStyle = "rgba(20,12,8,0.4)";
-      ctx.fill();
-      roundPlate(mx - 8, my - 8, mw + 16, mh + 16, 8);
-      ctx.fillStyle = "#14110e";
-      ctx.fill();
-      ctx.strokeStyle = "#e8d0a8";
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      var y;
-      for (y = 0; y < map.rows; y++) {
-        var x;
-        for (x = 0; x < map.cols; x++) {
-          var tile = map.tiles[y][x];
-          if (!tile) continue;
-          var px = mx + x * cellW;
-          var py = my + y * cellH;
-          if (tile.kind === "wall") ctx.fillStyle = "#e8d0a8";
-          else if (tile.cache) ctx.fillStyle = "#2f8f8a";
-          else if (tile.kind === "door" && !tile.open) ctx.fillStyle = colours[tile.colour] || ORANGE;
-          else if (tile.kind === "exit") ctx.fillStyle = ORANGE;
-          else if (tile.outdoor) ctx.fillStyle = "#3a2e22";
-          else ctx.fillStyle = "#241c16";
-          ctx.fillRect(px, py, cellW + 0.5, cellH + 0.5);
+      var pad = 8;
+      var doorsKey = "";
+      var di;
+      for (di = 0; di < map.doors.length; di++) {
+        doorsKey += map.tiles[map.doors[di].y][map.doors[di].x].open ? "1" : "0";
+      }
+      var key = sectorIndex + ":" + map.cols + "x" + map.rows + ":" + doorsKey + ":" + mw + "x" + mh;
+      if (!minimapCache || minimapCacheKey !== key) {
+        minimapCache = (typeof document !== "undefined" && document.createElement)
+          ? document.createElement("canvas")
+          : null;
+        if (minimapCache) {
+          minimapCache.width = mw + pad * 2;
+          minimapCache.height = mh + pad * 2;
+          var g = minimapCache.getContext("2d");
+          g.fillStyle = "#14110e";
+          g.fillRect(0, 0, minimapCache.width, minimapCache.height);
+          g.strokeStyle = "#e8d0a8";
+          g.lineWidth = 3;
+          g.strokeRect(1.5, 1.5, minimapCache.width - 3, minimapCache.height - 3);
+          var cellW = mw / map.cols;
+          var cellH = mh / map.rows;
+          var y;
+          for (y = 0; y < map.rows; y++) {
+            var x;
+            for (x = 0; x < map.cols; x++) {
+              var tile = map.tiles[y][x];
+              if (!tile) continue;
+              if (tile.kind === "wall") g.fillStyle = "#e8d0a8";
+              else if (tile.cache) g.fillStyle = "#2f8f8a";
+              else if (tile.kind === "door" && !tile.open) g.fillStyle = colours[tile.colour] || ORANGE;
+              else if (tile.kind === "exit") g.fillStyle = ORANGE;
+              else if (tile.outdoor) g.fillStyle = sectorIndex === 0 ? "#3f6b34" : "#3a2e22";
+              else g.fillStyle = "#241c16";
+              g.fillRect(pad + x * cellW, pad + y * cellH, cellW + 0.5, cellH + 0.5);
+            }
+          }
+          minimapCacheKey = key;
         }
+      }
+      if (minimapCache) {
+        ctx.drawImage(minimapCache, mx - pad, my - pad);
       }
       var unitX = mw / map.width;
       var unitY = mh / map.height;
@@ -2188,101 +3109,333 @@
       return tile && (tile.kind === "wall" || (tile.kind === "door" && !tile.open));
     }
 
-    function drawMetalWall(px, py, size, tx, ty) {
-      var lip = 9;
-      var south = !solidTile(tx, ty + 1);
-      var east = !solidTile(tx + 1, ty);
-      var north = !solidTile(tx, ty - 1);
-      var west = !solidTile(tx - 1, ty);
-      var topW = size - (east ? lip : 0);
-      var topH = size - (south ? lip : 0);
-      var plate = ctx.createLinearGradient(px, py, px + topW, py + topH);
-      plate.addColorStop(0, "#f3e6cf");
-      plate.addColorStop(0.5, "#c4a06a");
-      plate.addColorStop(1, "#8a6844");
-      ctx.fillStyle = plate;
-      ctx.fillRect(px, py, topW + 0.5, topH + 0.5);
+    function floorUnderWall(tx, ty) {
+      var dirs = [[0, -1], [0, 1], [1, 0], [-1, 0]];
+      var i;
+      var sawIndoor = false;
+      for (i = 0; i < dirs.length; i++) {
+        var tile = window.GameMap.tileAt(map, tx + dirs[i][0], ty + dirs[i][1]);
+        if (!tile || tile.kind !== "floor") continue;
+        if (tile.outdoor) return true;
+        sawIndoor = true;
+      }
+      return !sawIndoor && sectorIndex === 0 && ty < map.macro * 6;
+    }
 
-      ctx.fillStyle = "rgba(42,26,14,0.5)";
-      if (!east) ctx.fillRect(px + topW - 2, py, 2, topH);
-      if (!south) ctx.fillRect(px, py + topH - 2, topW, 2);
+    function wallCell(tx, ty) {
+      if (!map || ty < 0 || tx < 0 || ty >= map.rows || tx >= map.cols) return false;
+      var tile = map.tiles[ty][tx];
+      return !!(tile && tile.kind === "wall");
+    }
 
-      ctx.strokeStyle = "#1a120c";
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      if (north) {
-        ctx.moveTo(px, py + 1.5);
-        ctx.lineTo(px + topW, py + 1.5);
-      }
-      if (west) {
-        ctx.moveTo(px + 1.5, py);
-        ctx.lineTo(px + 1.5, py + topH);
-      }
-      if (south) {
-        ctx.moveTo(px, py + topH - 1);
-        ctx.lineTo(px + topW, py + topH - 1);
-      }
-      if (east) {
-        ctx.moveTo(px + topW - 1, py);
-        ctx.lineTo(px + topW - 1, py + topH);
-      }
-      ctx.stroke();
+    function closedDoorCell(tx, ty) {
+      if (!map || ty < 0 || tx < 0 || ty >= map.rows || tx >= map.cols) return false;
+      var tile = map.tiles[ty][tx];
+      return !!(tile && tile.kind === "door" && !tile.open);
+    }
 
-      var h = tileHash(tx, ty, 4);
-      if (h > 0.4 && topW > 22 && topH > 22) {
-        var inset = 7 + Math.floor(tileHash(tx, ty, 6) * 6);
-        var pw = topW - inset * 2;
-        var ph = topH - inset * 2;
-        if (pw > 8 && ph > 8) {
-          ctx.strokeStyle = "rgba(26,18,12,0.5)";
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(px + inset, py + inset, pw, ph);
-          if (h > 0.72) {
-            rivetAt(px + inset + 4, py + inset + 4, 1.8);
-            rivetAt(px + inset + pw - 4, py + inset + 4, 1.8);
+    function drawDoorBeam(x0, y0, bw, bh, horiz, colour) {
+      /* Thin metal shutter + key colour lamp — not the thick wall-door sheet. */
+      var thick = horiz ? Math.min(bh, 10) : Math.min(bw, 10);
+      var gx = horiz ? x0 : x0 + (bw - thick) * 0.5;
+      var gy = horiz ? y0 + (bh - thick) * 0.5 : y0;
+      var gw = horiz ? bw : thick;
+      var gh = horiz ? thick : bh;
+      var gate = ctx.createLinearGradient(gx, gy, gx + (horiz ? 0 : gw), gy + (horiz ? gh : 0));
+      gate.addColorStop(0, "#4b5563");
+      gate.addColorStop(0.45, "#1f2937");
+      gate.addColorStop(1, "#0b0f14");
+      ctx.fillStyle = gate;
+      ctx.fillRect(gx, gy, gw, gh);
+      ctx.strokeStyle = "#030712";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(gx + 0.5, gy + 0.5, gw - 1, gh - 1);
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1;
+      var i;
+      if (horiz) {
+        for (i = 6; i < gw - 4; i += 8) {
+          ctx.beginPath();
+          ctx.moveTo(gx + i, gy + 1);
+          ctx.lineTo(gx + i, gy + gh - 1);
+          ctx.stroke();
+        }
+      } else {
+        for (i = 6; i < gh - 4; i += 8) {
+          ctx.beginPath();
+          ctx.moveTo(gx + 1, gy + i);
+          ctx.lineTo(gx + gw - 1, gy + i);
+          ctx.stroke();
+        }
+      }
+      var lamp = colour || ORANGE;
+      ctx.fillStyle = lamp;
+      if (horiz) ctx.fillRect(gx + gw * 0.5 - 4, gy + 1, 8, Math.max(2, gh - 2));
+      else ctx.fillRect(gx + 1, gy + gh * 0.5 - 4, Math.max(2, gw - 2), 8);
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      if (horiz) ctx.fillRect(gx + gw * 0.5 - 2, gy + 2, 4, 1.5);
+      else ctx.fillRect(gx + 2, gy + gh * 0.5 - 2, 1.5, 4);
+      ctx.lineWidth = 1;
+    }
+
+    function drawDoorRuns(x0, y0, x1, y1, t, colours) {
+      var seen = Object.create(null);
+      var y;
+      for (y = y0; y <= y1; y++) {
+        var x;
+        for (x = x0; x <= x1; x++) {
+          if (!closedDoorCell(x, y) || seen[x + "," + y]) continue;
+          var tile = map.tiles[y][x];
+          var colour = colours[tile.colour] || ORANGE;
+          var e = closedDoorCell(x + 1, y);
+          var wNbr = closedDoorCell(x - 1, y);
+          var n = closedDoorCell(x, y - 1);
+          var s = closedDoorCell(x, y + 1);
+          var horiz = e || wNbr || (!n && !s);
+          if (horiz) {
+            var xL = x;
+            var xR = x;
+            while (closedDoorCell(xL - 1, y)) xL--;
+            while (closedDoorCell(xR + 1, y)) xR++;
+            var xi;
+            for (xi = xL; xi <= xR; xi++) seen[xi + "," + y] = 1;
+            drawDoorBeam(xL * t, y * t, (xR - xL + 1) * t, t, true, colour);
+          } else {
+            var yT = y;
+            var yB = y;
+            while (closedDoorCell(x, yT - 1)) yT--;
+            while (closedDoorCell(x, yB + 1)) yB++;
+            var yi;
+            for (yi = yT; yi <= yB; yi++) seen[x + "," + yi] = 1;
+            drawDoorBeam(x * t, yT * t, t, (yB - yT + 1) * t, false, colour);
           }
         }
-      } else if (topW > 28 && topH > 28) {
-        rivetAt(px + 10, py + 10, 2);
-        rivetAt(px + topW - 10, py + 10, 2);
       }
+    }
 
-      if (north) {
-        ctx.strokeStyle = "rgba(255,244,220,0.5)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(px + 4, py + 4);
-        ctx.lineTo(px + Math.max(8, topW - 4), py + 4);
-        ctx.stroke();
+    /* Vertical wall art, tiled along the run. Rotated for horizontal runs. */
+    function drawWallStrip(x, y, bw, bh, horiz) {
+      var img = wallVert;
+      var thick = horiz ? bh : bw;
+      var length = horiz ? bw : bh;
+      var scale = thick / img.naturalWidth;
+      if (!(scale > 0) || !(length > 0)) return;
+      var seg = img.naturalHeight * scale;
+      if (!(seg > 0.5)) {
+        ctx.drawImage(img, x, y, thick, length);
+        return;
       }
-      if (south) {
-        var face = ctx.createLinearGradient(px, py + topH, px, py + size);
-        face.addColorStop(0, "#8a6244");
-        face.addColorStop(1, "#3a2416");
-        ctx.fillStyle = face;
-        ctx.fillRect(px, py + topH, topW + 0.5, lip + 0.5);
-        ctx.fillStyle = "rgba(255,220,180,0.28)";
-        ctx.fillRect(px, py + topH, topW, 2);
+      var pos = 0;
+      var guard = 0;
+      while (pos < length - 0.25 && guard++ < 256) {
+        var drawLen = Math.min(seg, length - pos);
+        if (!(drawLen > 0.25)) break;
+        var srcH = img.naturalHeight * (drawLen / seg);
+        if (!horiz) {
+          ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, x, y + pos, thick, drawLen);
+        } else {
+          ctx.save();
+          ctx.translate(x + pos + drawLen * 0.5, y + thick * 0.5);
+          ctx.rotate(-Math.PI * 0.5);
+          ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, -thick * 0.5, -drawLen * 0.5, thick, drawLen);
+          ctx.restore();
+        }
+        pos += drawLen;
       }
-      if (east) {
-        ctx.fillStyle = "#2c1b12";
-        ctx.fillRect(px + topW, py, lip + 0.5, size + 0.5);
-        ctx.fillStyle = "rgba(255,220,180,0.12)";
-        ctx.fillRect(px + topW, py, 2, size);
+    }
+
+    function drawMetalBeam(x0, y0, bw, bh, horiz) {
+      if (readyImg(wallVert)) {
+        drawWallStrip(x0, y0, bw, bh, horiz);
+        return;
       }
+      if (readyImg(wallArt) && horiz) {
+        ctx.drawImage(wallArt, x0, y0, bw, bh);
+        return;
+      }
+      ctx.fillStyle = wallConcrete() || "#5a5652";
+      ctx.fillRect(x0, y0, bw, bh);
+    }
+
+    function drawWallRuns(x0, y0, x1, y1, t) {
+      var seen = Object.create(null);
+      var y;
+      for (y = y0; y <= y1; y++) {
+        var x;
+        for (x = x0; x <= x1; x++) {
+          if (!wallCell(x, y) || seen[x + "," + y]) continue;
+          var e = wallCell(x + 1, y);
+          var wNbr = wallCell(x - 1, y);
+          var n = wallCell(x, y - 1);
+          var s = wallCell(x, y + 1);
+          var horiz = e || wNbr || (!n && !s);
+          if (horiz) {
+            var xL = x;
+            var xR = x;
+            while (wallCell(xL - 1, y)) xL--;
+            while (wallCell(xR + 1, y)) xR++;
+            var yT = y;
+            var yB = y;
+            function rowSolid(ry) {
+              var xi;
+              for (xi = xL; xi <= xR; xi++) if (!wallCell(xi, ry)) return false;
+              return true;
+            }
+            while (rowSolid(yT - 1)) yT--;
+            while (rowSolid(yB + 1)) yB++;
+            var yi;
+            for (yi = yT; yi <= yB; yi++) {
+              var xi;
+              for (xi = xL; xi <= xR; xi++) seen[xi + "," + yi] = 1;
+            }
+            var bwH = (xR - xL + 1) * t;
+            var bhH = (yB - yT + 1) * t;
+            drawMetalBeam(xL * t, yT * t, bwH, bhH, bwH >= bhH);
+          } else {
+            var yT2 = y;
+            var yB2 = y;
+            while (wallCell(x, yT2 - 1)) yT2--;
+            while (wallCell(x, yB2 + 1)) yB2++;
+            var xL2 = x;
+            var xR2 = x;
+            function colSolid(cx) {
+              var yi;
+              for (yi = yT2; yi <= yB2; yi++) if (!wallCell(cx, yi)) return false;
+              return true;
+            }
+            while (colSolid(xL2 - 1)) xL2--;
+            while (colSolid(xR2 + 1)) xR2++;
+            var yi2;
+            for (yi2 = yT2; yi2 <= yB2; yi2++) {
+              var xi2;
+              for (xi2 = xL2; xi2 <= xR2; xi2++) seen[xi2 + "," + yi2] = 1;
+            }
+            var bwV = (xR2 - xL2 + 1) * t;
+            var bhV = (yB2 - yT2 + 1) * t;
+            drawMetalBeam(xL2 * t, yT2 * t, bwV, bhV, bwV >= bhV);
+          }
+        }
+      }
+    }
+
+    function blockIsWall(ax, ay, macro) {
+      var x = ax * macro;
+      var y = ay * macro;
+      if (!map || y < 0 || x < 0 || y >= map.rows || x >= map.cols) return false;
+      return wallCell(x, y);
+    }
+
+    /* L / T / + pieces, anchored on the wall centreline. */
+    function drawJoinSprite(img, cx, cy, rot, ax, ay, armPx, thick) {
+      if (!readyImg(img)) return;
+      var scale = thick / armPx;
+      var dw = img.naturalWidth * scale;
+      var dh = img.naturalHeight * scale;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+      ctx.drawImage(img, -ax * dw, -ay * dh, dw, dh);
+      ctx.restore();
+    }
+
+    function drawWallJoins(x0, y0, x1, y1, t) {
+      if (!map || !map.macro) return;
+      var macro = map.macro;
+      var thick = t * macro;
+      var ax0 = Math.max(0, Math.floor(x0 / macro) - 1);
+      var ay0 = Math.max(0, Math.floor(y0 / macro) - 1);
+      var ax1 = Math.min(Math.floor((map.cols - 1) / macro), Math.floor(x1 / macro) + 1);
+      var ay1 = Math.min(Math.floor((map.rows - 1) / macro), Math.floor(y1 / macro) + 1);
+      var ay;
+      for (ay = ay0; ay <= ay1; ay++) {
+        var ax;
+        for (ax = ax0; ax <= ax1; ax++) {
+          if (!blockIsWall(ax, ay, macro)) continue;
+          var n = blockIsWall(ax, ay - 1, macro);
+          var s = blockIsWall(ax, ay + 1, macro);
+          var e = blockIsWall(ax + 1, ay, macro);
+          var w = blockIsWall(ax - 1, ay, macro);
+          var arms = (n ? 1 : 0) + (s ? 1 : 0) + (e ? 1 : 0) + (w ? 1 : 0);
+          if (arms < 2 || (arms === 2 && ((n && s) || (e && w)))) continue;
+          var cx = (ax * macro + macro * 0.5) * t;
+          var cy = (ay * macro + macro * 0.5) * t;
+          if (arms === 4) {
+            drawJoinSprite(joinX, cx, cy, 0, 598.5 / 1199, 576.5 / 1217, 110, thick);
+            continue;
+          }
+          if (arms === 3) {
+            var rotT = 0;
+            if (!n) rotT = 0;
+            else if (!e) rotT = Math.PI * 0.5;
+            else if (!s) rotT = Math.PI;
+            else rotT = -Math.PI * 0.5;
+            drawJoinSprite(joinT, cx, cy, rotT, 546.5 / 1094, 52 / 984, 104, thick);
+            continue;
+          }
+          var rotL = 0;
+          if (e && s) rotL = 0;
+          else if (s && w) rotL = Math.PI * 0.5;
+          else if (w && n) rotL = Math.PI;
+          else rotL = -Math.PI * 0.5;
+          drawJoinSprite(joinL, cx, cy, rotL, 62 / 897, 66 / 1001, 124, thick);
+        }
+      }
+    }
+
+    function drawWallCornerTower(cx, cy, tx, ty) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(1, 10, 15, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      var steel = ctx.createLinearGradient(-14, -16, 14, 14);
+      steel.addColorStop(0, "#d7dde4");
+      steel.addColorStop(0.45, "#7b8794");
+      steel.addColorStop(1, "#2a3038");
+      ctx.fillStyle = steel;
+      ctx.beginPath();
+      ctx.moveTo(-13, 8);
+      ctx.lineTo(-11, -8);
+      ctx.lineTo(11, -8);
+      ctx.lineTo(13, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#0c0e12";
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      ctx.fillStyle = steel;
+      ctx.beginPath();
+      ctx.arc(0, -2, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      rivetAt(-7, -6, 1.6);
+      rivetAt(7, -6, 1.6);
+      rivetAt(-8, 4, 1.6);
+      rivetAt(8, 4, 1.6);
+      rivetAt(0, -9, 1.5);
+      ctx.fillStyle = "#c2410c";
+      ctx.beginPath();
+      ctx.arc(0, -14, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#0c0e12";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
       ctx.lineWidth = 1;
+      ctx.restore();
     }
 
     function beginFrame() {
       ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0);
       ctx.imageSmoothingEnabled = true;
-      if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+      if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "low";
     }
 
     function render() {
       beginFrame();
       if (!map) {
         ctx.clearRect(0, 0, w, h);
+        if (canvas.style) canvas.style.transform = "";
         return;
       }
 
@@ -2297,43 +3450,66 @@
       ctx.fillStyle = "#1a140e";
       ctx.fillRect(0, 0, w, h);
 
+      /* Simple float camera — same as the last smooth release. No CSS slide. */
+      if (canvas.style && canvas.style.transform) canvas.style.transform = "";
       ctx.save();
       ctx.translate(-camX + sx, -camY + sy);
 
       var t = map.tile;
+      var macro = map.macro || 3;
+      var drawCamX = camX + sx;
+      var drawCamY = camY + sy;
+      /* Align the floor loop to the macro grid so block art is not skipped. */
+      var x0 = Math.max(0, Math.floor(drawCamX / t) - 1);
+      var y0 = Math.max(0, Math.floor(drawCamY / t) - 1);
+      x0 = Math.floor(x0 / macro) * macro;
+      y0 = Math.floor(y0 / macro) * macro;
+      var x1 = Math.min(map.cols - 1, Math.ceil((drawCamX + w) / t) + 1);
+      var y1 = Math.min(map.rows - 1, Math.ceil((drawCamY + h) / t) + 1);
       var y;
-      for (y = 0; y < map.rows; y++) {
+      for (y = y0; y <= y1; y++) {
         var x;
-        for (x = 0; x < map.cols; x++) {
+        for (x = x0; x <= x1; x++) {
           var tile = map.tiles[y][x];
+          if (!tile) continue;
           var px = x * t;
           var py = y * t;
-          if (tile.kind === "wall") {
-            drawMetalWall(px, py, t, x, y);
-          } else if (tile.kind === "door" && !tile.open) {
-            drawMetalDoor(px, py, t, colours[tile.colour] || ORANGE);
-          } else {
-            drawFloorTile(px, py, t, x, y, !!tile.outdoor);
-            if (tile.kind === "exit") {
-              var ready = window.GameMap.allDoorsOpen(map);
-              ctx.strokeStyle = ready ? ORANGE : dim;
-              ctx.globalAlpha = ready ? 0.9 : 0.35;
-              ctx.lineWidth = 2;
-              ctx.strokeRect(px + 8, py + 8, t - 16, t - 16);
+          /* Floor under walls/doors so beams sit on continuous ground. */
+          var outdoorFloor = tile.kind === "wall" || tile.kind === "door"
+            ? floorUnderWall(x, y)
+            : !!tile.outdoor;
+          drawFloorTile(px, py, t, x, y, outdoorFloor);
+          if (tile.kind === "exit") {
+            var ready = window.GameMap.allDoorsOpen(map);
+            var pad = Math.max(1, (t * 0.2) | 0);
+            ctx.strokeStyle = ready ? ORANGE : dim;
+            ctx.globalAlpha = ready ? 0.9 : 0.35;
+            ctx.lineWidth = Math.max(1, t * 0.25);
+            ctx.strokeRect(px + pad, py + pad, t - pad * 2, t - pad * 2);
+            if (t >= 10) {
               ctx.font = "700 11px system-ui, sans-serif";
               ctx.fillStyle = ready ? ORANGE : dim;
               ctx.textAlign = "center";
               ctx.fillText("EXIT", px + t * 0.5, py + t * 0.55);
               ctx.textAlign = "left";
-              ctx.globalAlpha = 1;
-              ctx.lineWidth = 1;
             }
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = 1;
           }
         }
       }
+      /* Doors under props; walls redrawn after mobile enemies so concrete
+       * occludes oversized sprites instead of robots painting "through" walls. */
+      drawDoorRuns(x0, y0, x1, y1, t, colours);
 
+      var viewL = drawCamX - 48;
+      var viewT = drawCamY - 48;
+      var viewR = drawCamX + w + 48;
+      var viewB = drawCamY + h + 48;
       for (var di = 0; di < floorDecor.length; di++) {
-        drawFloorDecorItem(floorDecor[di]);
+        var decor = floorDecor[di];
+        if (decor.x < viewL || decor.y < viewT || decor.x > viewR || decor.y > viewB) continue;
+        drawFloorDecorItem(decor);
       }
 
       for (var ti = 0; ti < map.terminals.length; ti++) {
@@ -2343,6 +3519,10 @@
       for (var ai = 0; ai < map.ammoCrates.length; ai++) {
         if (map.ammoCrates[ai].taken) continue;
         drawAmmoCrate(map.ammoCrates[ai].x, map.ammoCrates[ai].y);
+      }
+      for (var cri = 0; cri < (map.creditCrates || []).length; cri++) {
+        if (map.creditCrates[cri].taken) continue;
+        drawCreditCrate(map.creditCrates[cri].x, map.creditCrates[cri].y);
       }
 
       for (var ci = 0; ci < (map.caches || []).length; ci++) {
@@ -2357,6 +3537,15 @@
       }
 
       for (var i = 0; i < enemies.length; i++) {
+        if (enemies[i].kind === "tower") continue;
+        drawEnemy(enemies[i]);
+      }
+
+      drawWallRuns(x0, y0, x1, y1, t);
+      drawWallJoins(x0, y0, x1, y1, t);
+
+      for (i = 0; i < enemies.length; i++) {
+        if (enemies[i].kind !== "tower") continue;
         drawEnemy(enemies[i]);
       }
 
@@ -2404,7 +3593,10 @@
       castShadow(player.x, player.y, 18, 8);
       ctx.save();
       ctx.translate(player.x, player.y);
-      ctx.rotate(player.facing);
+      /* Dir frames already face the right way; only rotate procedural fallback. */
+      if (!readyImg(pilotFrames[dir8(player.facing)]) && !readyImg(pilotArt)) {
+        ctx.rotate(player.facing);
+      }
       ctx.globalAlpha = iframes > 0 && Math.floor(iframes * 20) % 2 === 0 ? 0.35 : 1;
       drawPlayerBody();
       ctx.restore();
@@ -2493,6 +3685,7 @@
     }
 
     function paintMenuBackdrop() {
+      if (canvas.style) canvas.style.transform = "";
       beginFrame();
       ctx.clearRect(0, 0, w, h);
       var g = ctx.createLinearGradient(0, 0, 0, h);
@@ -2547,9 +3740,11 @@
       castShadow(pilotX, h * 0.58, 22 * pilotScale * 0.45, 10 * pilotScale * 0.45);
       ctx.save();
       ctx.translate(pilotX, h * 0.58);
-      ctx.rotate(-0.55);
       ctx.scale(pilotScale, pilotScale);
+      var prevFacing = player.facing;
+      player.facing = -Math.PI * 0.75; /* NW pose on the menu */
       drawPlayerBody();
+      player.facing = prevFacing;
       ctx.restore();
       drawVignette();
     }
@@ -2581,14 +3776,23 @@
       getScore: function () { return score; },
       hudSnapshot: function () {
         var gearBits = [];
+        var guns = [];
+        var gi;
         if (owned.dash) gearBits.push(dashCool > 0.15 ? "Dash…" : "Dash");
         if (breachCharges) gearBits.push("Breach");
         if (owned.hull) gearBits.push("Patch");
+        for (gi = 0; gi < GUN_ORDER.length; gi++) {
+          var gid = GUN_ORDER[gi];
+          if (!owned[gid] || !WEAPONS[gid]) continue;
+          guns.push({ id: gid, name: WEAPONS[gid].name, active: weaponId === gid });
+        }
         return {
           score: score,
           hp: hp,
           ammo: ammo,
           weapon: weapon().name,
+          weaponId: weaponId,
+          guns: guns,
           deck: map ? map.name : "",
           cards: { R: !!inventory.R, G: !!inventory.G, B: !!inventory.B },
           lowHp: hp <= 2,
@@ -2596,7 +3800,20 @@
           gear: gearBits.join("  ")
         };
       },
+      setWeapon: function (id) {
+        if (!owned[id] || !WEAPONS[id]) return false;
+        weaponId = id;
+        return true;
+      },
       getPlayerPos: function () { return { x: player.x - camX, y: player.y - camY }; },
+      /* Used by tests — tower body + props + walls. */
+      blocksAt: function (x, y, r) {
+        if (!map) return true;
+        var rad = r == null ? PLAYER_R : r;
+        return window.GameMap.circleBlocked(map, x, y, rad) ||
+          propBlocked(x, y, rad) ||
+          towerBlocked(x, y, rad);
+      },
       setOnOver: function (fn) { onOver = fn; },
       setOnShop: function (fn) { onShop = fn; },
       setOnPause: function (fn) { onPause = fn; },
@@ -2625,6 +3842,8 @@
     circlesHit: circlesHit,
     crawlerVector: crawlerVector,
     fortressShouldFire: fortressShouldFire,
+    WEAPONS: WEAPONS,
+    GUN_ORDER: GUN_ORDER,
     SHOP_ITEMS: SHOP_ITEMS
   };
 })();

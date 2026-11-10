@@ -25,6 +25,11 @@ test("twenty decks parse", () => {
     assert.ok(map.exits.length >= 1, "deck " + i + " has exit");
     assert.ok(map.keys.length >= 1, "deck " + i + " has keys");
     assert.ok(map.doors.length >= 1, "deck " + i + " has doors");
+    assert.equal(
+      map.spawns.some((s) => s.kind === "crawler"),
+      false,
+      "deck " + i + " has no old crawler spawns"
+    );
   }
   const bay = GameMap.cloneSector(19);
   assert.ok(bay.spawns.some((s) => s.kind === "boss"), "salvage bay has boss");
@@ -37,12 +42,22 @@ test("twenty decks parse", () => {
 
 test("circleBlocked hits walls and closed doors", () => {
   const map = GameMap.cloneSector(0);
-  assert.equal(GameMap.circleBlocked(map, 24, 24, 10), true);
+  assert.equal(GameMap.circleBlocked(map, -10, 24, 10), true, "out of bounds blocks");
+  const wall = map.tiles.flatMap((row, y) => row.map((tile, x) => ({ tile, x, y })))
+    .find((c) => c.tile.kind === "wall");
+  assert.ok(wall, "crash site still has fortress walls");
+  const wx = (wall.x + 0.5) * map.tile;
+  const wy = (wall.y + 0.5) * map.tile;
+  assert.equal(GameMap.circleBlocked(map, wx, wy, 10), true);
   const door = map.doors[0];
   const dx = (door.x + 0.5) * map.tile;
   const dy = (door.y + 0.5) * map.tile;
   assert.equal(GameMap.circleBlocked(map, dx, dy, 8), true);
-  map.tiles[door.y][door.x].open = true;
+  map.tiles.forEach((row) => {
+    row.forEach((tile) => {
+      if (tile.kind === "door" && tile.colour === door.colour) tile.open = true;
+    });
+  });
   assert.equal(GameMap.circleBlocked(map, dx, dy, 8), false);
 });
 
@@ -50,7 +65,11 @@ test("allDoorsOpen false until unlocked", () => {
   const map = GameMap.cloneSector(0);
   assert.equal(GameMap.allDoorsOpen(map), false);
   map.doors.forEach((d) => {
-    map.tiles[d.y][d.x].open = true;
+    map.tiles.forEach((row) => {
+      row.forEach((tile) => {
+        if (tile.kind === "door" && tile.colour === d.colour) tile.open = true;
+      });
+    });
   });
   assert.equal(GameMap.allDoorsOpen(map), true);
 });
@@ -77,4 +96,18 @@ test("a planted fortress fires, a walking one does not", () => {
   assert.equal(ShooterGame.fortressShouldFire(120, true, 0), true);
   assert.equal(ShooterGame.fortressShouldFire(120, false, 0), false);
   assert.equal(ShooterGame.fortressShouldFire(20, true, 0), false);
+});
+
+const { GameSettings } = load("settings.js", {
+  localStorage: {
+    store: Object.create(null),
+    getItem(k) { return this.store[k] || null; },
+    setItem(k, v) { this.store[k] = String(v); },
+  },
+});
+
+test("difficulty caps live enemies", () => {
+  assert.equal(GameSettings.difficultyMods("easy").maxEnemies, 2);
+  assert.equal(GameSettings.difficultyMods("normal").maxEnemies, 4);
+  assert.equal(GameSettings.difficultyMods("hard").maxEnemies, 16);
 });

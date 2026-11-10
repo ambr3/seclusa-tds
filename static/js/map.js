@@ -4,14 +4,17 @@
  * Story: crash → breach the fortress → push inward → salvage ship parts.
  *
  * # wall  . indoor floor  ~ outdoor floor  P start  X exit  T terminal  A ammo
- * S crashed ship  C solid crate
+ * S crashed ship  C solid crate  $ credit scrap (shoot)  Y armed tower
  * R/G/B keys  r/g/b doors  E grunt  F crawler  H fortress  D drone  O boss
  */
 
 (function () {
   "use strict";
 
-  var TILE = 48;
+  /* Fine grid. ASCII expands by MACRO; each # is a thick concrete block
+   * (floor-plan warehouse walls), not a thin pipe or metal pad. */
+  var TILE = 16;
+  var MACRO = 3;
 
   var KEY_COLOURS = {
     R: "#e11d48", G: "#16a34a", B: "#2563eb",
@@ -23,13 +26,12 @@
     {
       name: "Deck 1 — Crash site",
       rows: [
-        "################################",
-        "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#",
-        "#~~~~P~~~~S~~~~~~~~~~~~~~~~~~~~#",
-        "#~~~~~~R~~~~~~~~~~~~~~~~~~~~~~~#",
-        "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#",
-        "#~~~~~~~~~~~~~~~~~~~~C~~~~~~~~~#",
-        "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "~~~~P~~~~S~~~~~~~~~~~~~~~~~~~~~~",
+        "~~~~~~R~~~~$~~~~~~~~~~~~~~~~~~~~",
+        "~~~~~~~~$~~~~~~~$~~~~~~~~~~~~~~~",
+        "~~~~~~~~~~~~$~~~~~~~~C~~~~~~~~~~",
+        "~~~~~~~~~~~$~~~~~~~~~~~~~~~~~~~~",
         "##############r#################",
         "#........T........A............#",
         "#...E..............E...........#",
@@ -39,7 +41,7 @@
         "#..............B...............#",
         "##############b#################",
         "#..............X...............#",
-        "#....A..............E..........#",
+        "#....A..............E....$.....#",
         "################################"
       ]
     },
@@ -47,8 +49,8 @@
       name: "Deck 2 — Breach wall",
       rows: [
         "################################",
-        "#P..R.....#..........#.........#",
-        "#.........#..........#....A....#",
+        "#P..R..$..#..........#.........#",
+        "#....$....#..........#....A....#",
         "#....E....r....E.....g....D....#",
         "#.........#..........#.........#",
         "#....T....#....G.....#....B....#",
@@ -444,8 +446,9 @@
     }
   ];
 
+
   function spawnKind(ch) {
-    if (ch === "F") return "crawler";
+    if (ch === "F") return "drone"; /* old crawler art retired — Dave's drone sheet */
     if (ch === "H") return "fortress";
     if (ch === "D") return "drone";
     if (ch === "O") return "boss";
@@ -453,38 +456,135 @@
     return null;
   }
 
+  function asciiBlocking(rows, ax, ay) {
+    if (ay < 0 || ax < 0 || ay >= rows.length || ax >= rows[0].length) return true;
+    var c = rows[ay].charAt(ax);
+    return c === "#" || c === "r" || c === "g" || c === "b";
+  }
+
+  /* Neighbour test for strip direction — OOB is not a wall, or edge walls grow crosses. */
+  function asciiWallNeighbour(rows, ax, ay) {
+    if (ay < 0 || ax < 0 || ay >= rows.length || ax >= rows[0].length) return false;
+    var c = rows[ay].charAt(ax);
+    return c === "#" || c === "r" || c === "g" || c === "b";
+  }
+
+  function asciiOutdoor(rows, ax, ay) {
+    if (ay < 0 || ax < 0 || ay >= rows.length || ax >= rows[0].length) return false;
+    var ch = rows[ay].charAt(ax);
+    if (ch === "~" || ch === "S" || ch === "$" || ch === "Y") return true;
+    if (ch === "." || ch === "#") return false;
+    /* Letters (keys, player, enemies) inherit from outdoor neighbours. */
+    var dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    var i;
+    for (i = 0; i < dirs.length; i++) {
+      var nx = ax + dirs[i][0];
+      var ny = ay + dirs[i][1];
+      if (ny < 0 || nx < 0 || ny >= rows.length || nx >= rows[0].length) continue;
+      var nc = rows[ny].charAt(nx);
+      if (nc === "~" || nc === "S" || nc === "$" || nc === "Y") return true;
+    }
+    return false;
+  }
+
+  function fillFloorBlock(tiles, baseX, baseY, outdoor) {
+    var my;
+    for (my = 0; my < MACRO; my++) {
+      var mx;
+      for (mx = 0; mx < MACRO; mx++) {
+        tiles[baseY + my][baseX + mx] = { kind: "floor", outdoor: outdoor };
+      }
+    }
+  }
+
+  function paintWallStrip(tiles, rows, ax, ay, baseX, baseY, doorColour) {
+    var my;
+    var mx;
+    if (!doorColour) {
+      /* Floor-plan style: thick concrete — whole ASCII cell is solid wall. */
+      for (my = 0; my < MACRO; my++) {
+        for (mx = 0; mx < MACRO; mx++) {
+          tiles[baseY + my][baseX + mx] = { kind: "wall" };
+        }
+      }
+      return;
+    }
+    /* Door: keep a walkable bay, only a thin centre gate (1 tile thick). */
+    fillFloorBlock(tiles, baseX, baseY, false);
+    var mid = (MACRO / 2) | 0;
+    function wallish(c) {
+      return c === "#" || c === "r" || c === "g" || c === "b";
+    }
+    var left = ax > 0 ? rows[ay].charAt(ax - 1) : "#";
+    var right = ax < rows[ay].length - 1 ? rows[ay].charAt(ax + 1) : "#";
+    var up = ay > 0 ? rows[ay - 1].charAt(ax) : "#";
+    var down = ay < rows.length - 1 ? rows[ay + 1].charAt(ax) : "#";
+    var i;
+    if ((wallish(up) || wallish(down)) && !(wallish(left) || wallish(right))) {
+      /* Vertical wall run — thin north–south gate. */
+      for (i = 0; i < MACRO; i++) {
+        tiles[baseY + i][baseX + mid] = { kind: "door", colour: doorColour, open: false };
+      }
+    } else {
+      /* Horizontal wall run (default) — thin east–west gate. */
+      for (i = 0; i < MACRO; i++) {
+        tiles[baseY + mid][baseX + i] = { kind: "door", colour: doorColour, open: false };
+      }
+    }
+  }
+
   function parseLevel(rows, name, index) {
-    var h = rows.length;
-    var w = rows[0].length;
+    var ah = rows.length;
+    var aw = rows[0].length;
+    var h = ah * MACRO;
+    var w = aw * MACRO;
     var tiles = [];
     var keys = [];
     var doors = [];
     var spawns = [];
     var terminals = [];
     var ammoCrates = [];
+    var creditCrates = [];
     var exits = [];
     var ships = [];
     var crates = [];
-    var start = { x: TILE * 1.5, y: TILE * 1.5 };
+    var towers = [];
+    var start = { x: TILE * MACRO * 1.5, y: TILE * MACRO * 1.5 };
     var y;
+    var x;
 
     for (y = 0; y < h; y++) {
-      var row = rows[y];
-      if (row.length !== w) throw new Error("map row width mismatch at " + y + " in " + name);
       tiles[y] = [];
-      var x;
-      for (x = 0; x < w; x++) {
-        var ch = row.charAt(x);
-        var cx = (x + 0.5) * TILE;
-        var cy = (y + 0.5) * TILE;
+      for (x = 0; x < w; x++) tiles[y][x] = { kind: "floor", outdoor: false };
+    }
+
+    var ay;
+    for (ay = 0; ay < ah; ay++) {
+      var row = rows[ay];
+      if (row.length !== aw) throw new Error("map row width mismatch at " + ay + " in " + name);
+      var ax;
+      for (ax = 0; ax < aw; ax++) {
+        var ch = row.charAt(ax);
+        var baseX = ax * MACRO;
+        var baseY = ay * MACRO;
+        var cx = (ax + 0.5) * MACRO * TILE;
+        var cy = (ay + 0.5) * MACRO * TILE;
+
         if (ch === "#") {
-          tiles[y][x] = { kind: "wall" };
+          paintWallStrip(tiles, rows, ax, ay, baseX, baseY, null);
         } else if (ch === "r" || ch === "g" || ch === "b") {
-          tiles[y][x] = { kind: "door", colour: ch.toUpperCase(), open: false };
-          doors.push({ x: x, y: y, colour: ch.toUpperCase() });
+          paintWallStrip(tiles, rows, ax, ay, baseX, baseY, ch.toUpperCase());
+          var mid = (MACRO / 2) | 0;
+          doors.push({ x: baseX + mid, y: baseY + mid, colour: ch.toUpperCase() });
         } else {
-          var outdoor = ch === "~" || ch === "S";
-          tiles[y][x] = { kind: "floor", outdoor: outdoor };
+          var outdoor = asciiOutdoor(rows, ax, ay);
+          if ((ch === "$" || ch === "Y") && ay > 0 && ax > 0 && ax < aw - 1) {
+            var sample = rows[ay].charAt(ax - 1);
+            if (sample === "." || sample === "A" || sample === "T" || sample === "E" || sample === "X") {
+              outdoor = false;
+            }
+          }
+          fillFloorBlock(tiles, baseX, baseY, outdoor);
           if (ch === "P") start = { x: cx, y: cy };
           if (ch === "R" || ch === "G" || ch === "B") {
             keys.push({ x: cx, y: cy, colour: ch, taken: false });
@@ -493,11 +593,29 @@
           if (kind) spawns.push({ x: cx, y: cy, kind: kind });
           if (ch === "T") terminals.push({ x: cx, y: cy });
           if (ch === "A") ammoCrates.push({ x: cx, y: cy, taken: false });
+          if (ch === "$") {
+            creditCrates.push({
+              x: cx, y: cy, taken: false,
+              credits: 6 + ((ax * 3 + ay * 5) % 7)
+            });
+          }
+          if (ch === "Y") towers.push({ x: cx, y: cy });
           if (ch === "S") ships.push({ x: cx, y: cy });
           if (ch === "C") crates.push({ x: cx, y: cy });
           if (ch === "X") {
-            tiles[y][x] = { kind: "exit", outdoor: false };
-            exits.push({ x: cx, y: cy, tx: x, ty: y });
+            var midX = baseX + ((MACRO / 2) | 0);
+            var midY = baseY + ((MACRO / 2) | 0);
+            var ey;
+            for (ey = 0; ey < MACRO; ey++) {
+              var ex;
+              for (ex = 0; ex < MACRO; ex++) {
+                tiles[baseY + ey][baseX + ex] = { kind: "exit", outdoor: false };
+              }
+            }
+            exits.push({
+              x: cx, y: cy,
+              tx: midX, ty: midY
+            });
           }
         }
       }
@@ -507,6 +625,7 @@
       name: name || "Deck",
       index: index || 0,
       tile: TILE,
+      macro: MACRO,
       cols: w,
       rows: h,
       width: w * TILE,
@@ -517,15 +636,81 @@
       spawns: spawns,
       terminals: terminals,
       ammoCrates: ammoCrates,
+      creditCrates: creditCrates,
       exits: exits,
       ships: ships,
       crates: crates,
+      towers: towers,
       caches: [],
       start: start
     };
+    placeCornerTowers(level);
     carveCache(level);
     if (!level.caches.length) dropCache(level);
     return level;
+  }
+
+  /* Wall colliders are the fine cell itself — already thin. */
+  var WALL_THICK = TILE;
+
+  function wallRectsForTile(map, tx, ty) {
+    var tile = tileAt(map, tx, ty);
+    if (!isBlocking(tile)) return [];
+    var T = map.tile;
+    return [{ x: tx * T, y: ty * T, w: T, h: T }];
+  }
+
+  function touchesOutdoor(map, tx, ty) {
+    /* Ortho + diagonal — join cells sit inside the cross and only see walls ortho. */
+    var dirs = [[0, -1], [0, 1], [1, 0], [-1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+    var i;
+    for (i = 0; i < dirs.length; i++) {
+      var t = tileAt(map, tx + dirs[i][0], ty + dirs[i][1]);
+      if (t && t.kind === "floor" && t.outdoor) return true;
+    }
+    return false;
+  }
+
+  function wallNeighbourInMap(map, tx, ty) {
+    if (ty < 0 || tx < 0 || ty >= map.rows || tx >= map.cols) return false;
+    return isBlocking(map.tiles[ty][tx]);
+  }
+
+  function isCornerTowerCell(map, tx, ty) {
+    if (tileAt(map, tx, ty).kind !== "wall") return false;
+    if (!touchesOutdoor(map, tx, ty)) return false;
+    /* OOB is not a wall arm — edge-of-map corners must still count as L joins. */
+    var n = wallNeighbourInMap(map, tx, ty - 1);
+    var s = wallNeighbourInMap(map, tx, ty + 1);
+    var e = wallNeighbourInMap(map, tx + 1, ty);
+    var w = wallNeighbourInMap(map, tx - 1, ty);
+    var walls = (n ? 1 : 0) + (s ? 1 : 0) + (e ? 1 : 0) + (w ? 1 : 0);
+    /* Outer L only — thick wall edges are T-junctions (3 neighbours), not corners. */
+    if (walls !== 2) return false;
+    if ((n && s) || (e && w)) return false;
+    return true;
+  }
+
+  function placeCornerTowers(map) {
+    var seen = {};
+    var i;
+    for (i = 0; i < map.towers.length; i++) {
+      seen[Math.round(map.towers[i].x) + "," + Math.round(map.towers[i].y)] = 1;
+    }
+    var y;
+    for (y = 0; y < map.rows; y++) {
+      var x;
+      for (x = 0; x < map.cols; x++) {
+        if (!isCornerTowerCell(map, x, y)) continue;
+        var cx = (x + 0.5) * map.tile;
+        var cy = (y + 0.5) * map.tile;
+        var key = Math.round(cx) + "," + Math.round(cy);
+        if (seen[key]) continue;
+        seen[key] = 1;
+        map.towers.push({ x: cx, y: cy, corner: true });
+        map.tiles[y][x].tower = true;
+      }
+    }
   }
 
   function dropCache(map) {
@@ -649,7 +834,7 @@
     return false;
   }
 
-  function circleBlocked(map, x, y, r) {
+  function circleBlocked(map, x, y, r, ignoreTowerWalls) {
     var minTX = Math.floor((x - r) / map.tile);
     var maxTX = Math.floor((x + r) / map.tile);
     var minTY = Math.floor((y - r) / map.tile);
@@ -658,24 +843,32 @@
     for (ty = minTY; ty <= maxTY; ty++) {
       var tx;
       for (tx = minTX; tx <= maxTX; tx++) {
-        if (!isBlocking(tileAt(map, tx, ty))) continue;
-        var left = tx * map.tile;
-        var top = ty * map.tile;
-        var nearestX = Math.max(left, Math.min(x, left + map.tile));
-        var nearestY = Math.max(top, Math.min(y, top + map.tile));
-        var dx = x - nearestX;
-        var dy = y - nearestY;
-        if (dx * dx + dy * dy < r * r) return true;
+        var tile = tileAt(map, tx, ty);
+        if (!isBlocking(tile)) continue;
+        /* Bullets may pass the wall cell under a corner tower so the gun is hittable. */
+        if (ignoreTowerWalls && tile.kind === "wall" && tile.tower) continue;
+        var rects = wallRectsForTile(map, tx, ty);
+        var ri;
+        for (ri = 0; ri < rects.length; ri++) {
+          var box = rects[ri];
+          var nearestX = Math.max(box.x, Math.min(x, box.x + box.w));
+          var nearestY = Math.max(box.y, Math.min(y, box.y + box.h));
+          var dx = x - nearestX;
+          var dy = y - nearestY;
+          if (dx * dx + dy * dy < r * r) return true;
+        }
       }
     }
     return false;
   }
 
   function tryOpenDoor(map, inventory, x, y, r) {
-    var minTX = Math.floor((x - r - 4) / map.tile);
-    var maxTX = Math.floor((x + r + 4) / map.tile);
-    var minTY = Math.floor((y - r - 4) / map.tile);
-    var maxTY = Math.floor((y + r + 4) / map.tile);
+    /* r is full unlock reach from the pilot centre (caller passes a generous radius). */
+    var reach = Math.max(0, r || 0);
+    var minTX = Math.floor((x - reach) / map.tile);
+    var maxTX = Math.floor((x + reach) / map.tile);
+    var minTY = Math.floor((y - reach) / map.tile);
+    var maxTY = Math.floor((y + reach) / map.tile);
     var opened = null;
     var ty;
     for (ty = minTY; ty <= maxTY; ty++) {
@@ -684,21 +877,27 @@
         var tile = tileAt(map, tx, ty);
         if (tile.kind !== "door" || tile.open) continue;
         if (!inventory[tile.colour]) continue;
-        tile.open = true;
         opened = tile.colour;
+        break;
+      }
+      if (opened) break;
+    }
+    if (!opened) return null;
+    for (ty = 0; ty < map.rows; ty++) {
+      for (var tx2 = 0; tx2 < map.cols; tx2++) {
+        var d = map.tiles[ty][tx2];
+        if (d.kind === "door" && d.colour === opened) d.open = true;
       }
     }
     return opened;
   }
 
   function allDoorsOpen(map) {
-    var y;
-    for (y = 0; y < map.rows; y++) {
-      var x;
-      for (x = 0; x < map.cols; x++) {
-        var t = map.tiles[y][x];
-        if (t.kind === "door" && !t.open) return false;
-      }
+    var i;
+    for (i = 0; i < map.doors.length; i++) {
+      var d = map.doors[i];
+      var tile = map.tiles[d.y] && map.tiles[d.y][d.x];
+      if (tile && tile.kind === "door" && !tile.open) return false;
     }
     return true;
   }
@@ -718,12 +917,16 @@
 
   window.GameMap = {
     TILE: TILE,
+    MACRO: MACRO,
+    WALL_THICK: WALL_THICK,
     KEY_COLOURS: KEY_COLOURS,
     sectorCount: sectorCount,
     cloneSector: cloneSector,
     cloneMap: function () { return cloneSector(0); },
     tileAt: tileAt,
     isBlocking: isBlocking,
+    wallRectsForTile: wallRectsForTile,
+    isCornerTowerCell: isCornerTowerCell,
     circleBlocked: circleBlocked,
     tryOpenDoor: tryOpenDoor,
     allDoorsOpen: allDoorsOpen,

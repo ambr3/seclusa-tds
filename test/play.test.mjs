@@ -82,12 +82,21 @@ function settingsStub() {
       progress.difficulty = v;
       return v;
     },
-    difficultyMods: () => ({ spawn: 1, enemySpeed: 1, enemyHp: 1, ammo: 1, playerSpeed: 1 }),
+    difficultyMods: () => ({ spawn: 1, enemySpeed: 1, enemyHp: 1, ammo: 1, playerSpeed: 1, maxEnemies: 12 }),
     getProgress: () => progress,
     write: (patch) => {
       if (patch && patch.clearSuspended) progress.suspended = null;
       else if (patch && patch.suspended) progress.suspended = patch.suspended;
       if (patch && typeof patch.bestScore === "number") progress.bestScore = patch.bestScore;
+      if (patch && patch.owned && typeof patch.owned === "object") {
+        progress.owned = {
+          pistol: true,
+          shotgun: !!patch.owned.shotgun,
+          smg: !!patch.owned.smg,
+          rifle: !!patch.owned.rifle,
+          lance: !!patch.owned.lance,
+        };
+      }
       return progress;
     },
     canContinue: () => !!progress.suspended,
@@ -104,12 +113,15 @@ function bootWindow(canvas) {
     "menu-controls", "menu-best",
     "overlay-menu", "overlay-over", "over-title", "over-score",
     "shop-credits", "shop-ammo", "shop-hp",
+    "playhud", "hud-guns", "hud-score", "hud-hp", "hud-ammo", "hud-deck", "hud-gear",
+    "hud-card-R", "hud-card-G", "hud-card-B",
   ];
   const nodes = new Map();
   function make(id) {
     const classes = new Set();
     const attrs = {};
     const listeners = {};
+    let html = "";
     const node = {
       id,
       hidden: false,
@@ -129,12 +141,15 @@ function bootWindow(canvas) {
       setAttribute(k, v) { attrs[k] = String(v); },
       getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
       addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
-      click() { (listeners.click || []).forEach((fn) => fn({})); },
+      click(event) { (listeners.click || []).forEach((fn) => fn(event || {})); },
       querySelector() { return null; },
       querySelectorAll() { return []; },
       getBoundingClientRect() {
         return { width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600 };
       },
+      get innerHTML() { return html; },
+      set innerHTML(value) { html = String(value); },
+      _listeners: listeners,
     };
     nodes.set(id, node);
     return node;
@@ -266,4 +281,208 @@ test("menu keeps the live deck", () => {
   assert.equal(game.isPlaying(), true);
   assert.equal(game.getScore(), snap.score);
   assert.equal(win.GameSettings.getProgress().suspended.hp, hp);
+});
+
+
+test("begin run keeps unlocked guns", () => {
+  const canvas = mockCanvas(640, 480);
+  const win = bootWindow(canvas);
+  const { GameMap } = load("map.js", win);
+  win.GameMap = GameMap;
+  win.GameSettings = settingsStub();
+  win.GameSettings.getProgress().owned = {
+    pistol: true, shotgun: true, smg: true, rifle: false, lance: false,
+  };
+  const { ShooterGame } = load("game.js", win);
+  const game = ShooterGame.create(canvas);
+  game.start({});
+  const hud = game.hudSnapshot();
+  const ids = hud.guns.map((g) => g.id);
+  assert.deepEqual(ids, ["pistol", "shotgun", "smg"]);
+  assert.equal(game.setWeapon("smg"), true);
+  assert.equal(game.hudSnapshot().weaponId, "smg");
+  assert.equal(game.setWeapon("lance"), false);
+});
+
+test("shop lists auto and lance", () => {
+  const canvas = mockCanvas(320, 240);
+  const win = bootWindow(canvas);
+  const { GameMap } = load("map.js", win);
+  win.GameMap = GameMap;
+  win.GameSettings = settingsStub();
+  const { ShooterGame } = load("game.js", win);
+  const ids = ShooterGame.SHOP_ITEMS.filter((i) => i.kind === "weapon").map((i) => i.id);
+  assert.deepEqual(ids, ["shotgun", "smg", "rifle", "lance"]);
+  assert.ok(ShooterGame.WEAPONS.smg);
+  assert.ok(ShooterGame.WEAPONS.lance);
+});
+
+test("corner towers block the pilot", () => {
+  const canvas = mockCanvas(800, 600);
+  const win = bootWindow(canvas);
+  const { GameMap } = load("map.js", win);
+  win.GameMap = GameMap;
+  win.GameSettings = settingsStub();
+  const { ShooterGame } = load("game.js", win);
+  const game = ShooterGame.create(canvas);
+  game.resize(400, 300);
+  game.start({});
+  const crash = GameMap.cloneSector(0);
+  assert.ok(crash.towers.length >= 2, "crash has towers");
+  const tw = crash.towers[0];
+  assert.equal(game.blocksAt(tw.x, tw.y, 12), true, "tower body blocks");
+  assert.equal(game.blocksAt(crash.start.x, crash.start.y, 12), false, "start is open");
+});
+
+test("camera stays locked on the pilot", () => {
+  const canvas = mockCanvas(800, 600);
+  const win = bootWindow(canvas);
+  const { GameMap } = load("map.js", win);
+  win.GameMap = GameMap;
+  const settings = settingsStub();
+  win.GameSettings = settings;
+  const { ShooterGame } = load("game.js", win);
+  const game = ShooterGame.create(canvas);
+  game.resize(400, 300);
+  /* Mid-map so the camera is free to centre on the pilot. */
+  settings.write({
+    suspended: {
+      sectorIndex: 0,
+      score: 0,
+      hp: 5,
+      ammo: 40,
+      weaponId: "pistol",
+      owned: { pistol: true },
+      inventory: { R: false, G: false, B: false },
+      player: { x: 520, y: 280, facing: 0 },
+      enemies: [],
+      doorsOpen: [],
+      keysTaken: [],
+      cratesTaken: [],
+      creditsTaken: [],
+      cachesTaken: [],
+      breached: [],
+      breachCharges: 0,
+      patchRun: false,
+    },
+  });
+  game.start({ continueRun: true });
+  const idle = {
+    moveX: 0, moveY: 0, aimX: 0, aimY: 0, hasAim: false,
+    shooting: false, autoAim: false, interact: false,
+  };
+  for (let i = 0; i < 20; i++) game.update(0.016, { ...idle, moveX: 1 });
+  const pos = game.getPlayerPos();
+  assert.ok(Math.abs(pos.x - 200) < 2, "player stays mid-view x " + pos.x);
+  assert.ok(Math.abs(pos.y - 150) < 2, "player stays mid-view y " + pos.y);
+  game.render();
+  assert.equal(canvas.style.transform || "", "", "camera uses canvas translate, not CSS slide");
+});
+
+test("menu backdrop clears the camera slide", () => {
+  const canvas = mockCanvas(800, 600);
+  const win = bootWindow(canvas);
+  const { GameMap } = load("map.js", win);
+  win.GameMap = GameMap;
+  win.GameSettings = settingsStub();
+  const { ShooterGame } = load("game.js", win);
+  const game = ShooterGame.create(canvas);
+  game.resize(400, 300);
+  game.start({});
+  canvas.style.transform = "translate3d(0.4px, -0.3px, 0)";
+  game.paintMenuBackdrop();
+  assert.equal(canvas.style.transform, "");
+});
+
+test("mouse aim uses CSS pixels not the backing store", () => {
+  const listeners = {};
+  const surface = {
+    width: 1600,
+    height: 1200,
+    style: {},
+    addEventListener(type, fn) { listeners[type] = fn; },
+    removeEventListener() {},
+    setPointerCapture() {},
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 };
+    },
+  };
+  const win = {
+    document: { documentElement: {} },
+    navigator: {},
+    getComputedStyle: () => ({ getPropertyValue: () => "" }),
+    matchMedia: () => ({ matches: false }),
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  load("input.js", win);
+  win.GameInput.attach(surface);
+  win.GameInput.setAutoAim(false);
+  listeners.pointermove({
+    clientX: 500,
+    clientY: 300,
+    pointerType: "mouse",
+    pointerId: 1,
+    preventDefault() {},
+  });
+  const state = win.GameInput.getState(400, 300);
+  assert.ok(state.hasAim, "aiming");
+  assert.ok(state.aimX > 0.95, "aim right in CSS space, got " + state.aimX);
+  assert.ok(Math.abs(state.aimY) < 0.1, "no vertical drift, got " + state.aimY);
+});
+
+test("HUD gun buttons call setWeapon", () => {
+  const canvas = mockCanvas(800, 600);
+  const win = bootWindow(canvas);
+  const rafQueue = [];
+  win.requestAnimationFrame = (fn) => {
+    rafQueue.push(fn);
+    return rafQueue.length;
+  };
+  const { GameMap } = load("map.js", win);
+  win.GameMap = GameMap;
+  win.GameSettings = settingsStub();
+  win.GameSettings.getProgress().owned = {
+    pistol: true, shotgun: true, smg: true, rifle: false, lance: false,
+  };
+  win.Theme = {
+    apply() {},
+    current() { return "system"; },
+    setBackground() {},
+    paintBackground() {},
+    paintModeChrome() {},
+    set() {},
+  };
+  win.GameInput = {
+    setAutoAim() {},
+    setEnabled() {},
+    attach() {},
+    preferTouchChrome() { return false; },
+    getState() {
+      return {
+        moveX: 0, moveY: 0, aimX: 0, aimY: 0, hasAim: false, shooting: false,
+        touchMode: false,
+      };
+    },
+  };
+  win.GameAudio = { unlock() {}, setMuted() {} };
+  win.navigator.serviceWorker = undefined;
+  load("game.js", win);
+  load("app.js", win);
+  win.document.getElementById("btn-play").click();
+  assert.ok(rafQueue.length >= 1, "play starts the frame loop");
+  const first = rafQueue.shift();
+  first(16);
+  const rack = win.document.getElementById("hud-guns");
+  assert.ok(rack._listeners.click && rack._listeners.click.length, "rack click wired");
+  assert.match(rack.innerHTML, /data-gun="smg"/);
+  rack.click({
+    target: {
+      getAttribute(k) { return k === "data-gun" ? "smg" : null; },
+      parentNode: null,
+    },
+  });
+  rafQueue.length = 0;
+  first(32);
+  assert.match(rack.innerHTML, /data-gun="smg"[^>]*aria-pressed="true"/);
 });

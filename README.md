@@ -11,10 +11,10 @@ Offline PWA. Data stays on the device; nothing is sent anywhere.
 
 ## What it does
 
-- Version 0.1.3
+- Version 0.1.45
 - Twenty fortress decks, from the crash site to the salvage bay
-- Keycards, doors, ammo crates, side caches, and a salvage terminal
-- Pistol, shotgun, and rifle, plus dash, breach, and a hull patch
+- Keycards, doors, ammo crates, shootable credit scrap, side caches, and a salvage terminal
+- Pistol, scatter, auto, rifle, and lance, plus dash, breach, and a hull patch
 - Progress (unlocks, guns, best score) saved locally
 
 ## Run
@@ -27,7 +27,8 @@ Open `http://127.0.0.1:18846/`.
 
 ## Play
 
-- WASD move, Shift dash, F breach, Space fire, E terminal, P pause
+- WASD move, 1–5 switch guns, Shift dash, F breach, Space fire, E terminal, P pause
+- Credits come from drops (enemies) and yellow CR scrap boxes you shoot open
 - Doors open red, then green, then blue
 - Clear the fortress core, then hold E at the wreck to patch the hull
 

@@ -47,14 +47,16 @@
   }
 
   function localPoint(event) {
-    var rect = surface.getBoundingClientRect();
-    var scaleX = surface.width / Math.max(1, rect.width);
-    var scaleY = surface.height / Math.max(1, rect.height);
+    /* CSS / logical pixels — same space as getPlayerPos() and the game view.
+       Use the stage (parent), not the canvas rect: the canvas CSS-slides by a
+       sub-pixel for smooth camera, which would skew getBoundingClientRect. */
+    var box = surface.parentElement || surface;
+    var rect = box.getBoundingClientRect();
     return {
-      x: (event.clientX - rect.left) * scaleX,
-      y: (event.clientY - rect.top) * scaleY,
-      w: surface.width,
-      h: surface.height
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      w: Math.max(1, rect.width),
+      h: Math.max(1, rect.height)
     };
   }
 
@@ -283,6 +285,8 @@
     var weapon1 = consume("Digit1") || consume("Numpad1");
     var weapon2 = consume("Digit2") || consume("Numpad2");
     var weapon3 = consume("Digit3") || consume("Numpad3");
+    var weapon4 = consume("Digit4") || consume("Numpad4");
+    var weapon5 = consume("Digit5") || consume("Numpad5");
 
     return {
       moveX: move.x,
@@ -300,6 +304,8 @@
       weapon1: weapon1,
       weapon2: weapon2,
       weapon3: weapon3,
+      weapon4: weapon4,
+      weapon5: weapon5,
       touchMode: touchMode || moveStick.active || aimStick.active || firePad.active,
       moveStick: {
         active: moveStick.active,
