@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.49] - 2026-11-10
+
+- Restore 0.1.3 metal walls and doors (neighbor lips for corners/crosses). Drop textured join overlap.
+
+## [0.1.48] - 2026-11-10
+
+- Walls use wall.jpg on straight cells; L / T / + join pieces at corners and crosses (clipped). Doors on top as bold key-coloured gates.
+
+## [0.1.47] - 2026-11-10
+
+- Deck 2 only: stop wall-cache carve punching a hole in the corridor wall (matches layout overview). Deck 1 unchanged.
+
+## [0.1.46] - 2026-11-10
+
+- Doors fill the whole wall cell again (0.1.3-style), so decks 2+ no longer show missing wall gaps. Door draw fills that block (not a thin shutter). Deck 2 layout matches 0.1.3.
+
 ## [0.1.45] - 2026-11-10
 
 - Easy and medium much easier: fewer deck enemies, tiny wave caps, slower/weaker fire, more HP/ammo, hits bank before a heart drops (hard unchanged).

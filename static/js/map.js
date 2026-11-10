@@ -47,10 +47,13 @@
     },
     {
       name: "Deck 2 — Breach wall",
+      /* Keep corridor walls solid — auto wall-cache carve punched a hole
+       * under the green-door column that looked like a missing wall. */
+      noWallCache: true,
       rows: [
         "################################",
-        "#P..R..$..#..........#.........#",
-        "#....$....#..........#....A....#",
+        "#P..R.....#..........#.........#",
+        "#.........#..........#....A....#",
         "#....E....r....E.....g....D....#",
         "#.........#..........#.........#",
         "#....T....#....G.....#....B....#",
@@ -509,31 +512,22 @@
       }
       return;
     }
-    /* Door: keep a walkable bay, only a thin centre gate (1 tile thick). */
-    fillFloorBlock(tiles, baseX, baseY, false);
-    var mid = (MACRO / 2) | 0;
-    function wallish(c) {
-      return c === "#" || c === "r" || c === "g" || c === "b";
-    }
-    var left = ax > 0 ? rows[ay].charAt(ax - 1) : "#";
-    var right = ax < rows[ay].length - 1 ? rows[ay].charAt(ax + 1) : "#";
-    var up = ay > 0 ? rows[ay - 1].charAt(ax) : "#";
-    var down = ay < rows.length - 1 ? rows[ay + 1].charAt(ax) : "#";
-    var i;
-    if ((wallish(up) || wallish(down)) && !(wallish(left) || wallish(right))) {
-      /* Vertical wall run — thin north–south gate. */
-      for (i = 0; i < MACRO; i++) {
-        tiles[baseY + i][baseX + mid] = { kind: "door", colour: doorColour, open: false };
-      }
-    } else {
-      /* Horizontal wall run (default) — thin east–west gate. */
-      for (i = 0; i < MACRO; i++) {
-        tiles[baseY + mid][baseX + i] = { kind: "door", colour: doorColour, open: false };
+    /* 0.1.3-style door: the whole MACRO block is the door (same footprint as
+     * a # wall cell). Thin floor-bay gates looked like missing walls on
+     * decks 2+. */
+    for (my = 0; my < MACRO; my++) {
+      for (mx = 0; mx < MACRO; mx++) {
+        tiles[baseY + my][baseX + mx] = {
+          kind: "door",
+          colour: doorColour,
+          open: false
+        };
       }
     }
   }
 
-  function parseLevel(rows, name, index) {
+  function parseLevel(rows, name, index, opts) {
+    opts = opts || {};
     var ah = rows.length;
     var aw = rows[0].length;
     var h = ah * MACRO;
@@ -645,7 +639,7 @@
       start: start
     };
     placeCornerTowers(level);
-    carveCache(level);
+    if (!opts.noWallCache) carveCache(level);
     if (!level.caches.length) dropCache(level);
     return level;
   }
@@ -819,7 +813,7 @@
   function cloneSector(index) {
     var i = Math.max(0, Math.min(SECTORS.length - 1, index | 0));
     var s = SECTORS[i];
-    return parseLevel(s.rows, s.name, i);
+    return parseLevel(s.rows, s.name, i, s);
   }
 
   function tileAt(map, tx, ty) {

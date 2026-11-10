@@ -2060,7 +2060,12 @@
           loadImg("pilot-dir-" + idx + ".png", function (img) { pilotFrames[idx] = img; });
         })(i);
       }
+      /* wall-straight.png = Dave's wall.jpg (top-down blocks). wall.png is an
+       * older side strip that reads as pipes when stretched — keep as fallback. */
       loadImg("wall-straight.png", function (img) { wallArt = img; });
+      loadImg("wall.png", function (img) {
+        if (!wallArt) wallArt = img;
+      });
       loadImg("wall-vert.png", function (img) {
         wallVertClean = img;
         if (!wallVert) wallVert = img;
@@ -2721,25 +2726,8 @@
       ctx.lineWidth = 1;
     }
 
+    /* 0.1.3 door plate — one ASCII/MACRO cell, key colour lock. */
     function drawMetalDoor(px, py, size, colour) {
-      if (size <= 20) {
-        /* Thin door segment — matches wall beam, not a chunky lock panel. */
-        var door = ctx.createLinearGradient(px, py, px, py + size);
-        door.addColorStop(0, "#f8fafc");
-        door.addColorStop(0.35, colour || ORANGE);
-        door.addColorStop(1, "#1c1917");
-        ctx.fillStyle = door;
-        ctx.fillRect(px, py, size, size);
-        ctx.fillStyle = "rgba(255,255,255,0.3)";
-        ctx.fillRect(px + 1, py + 2, size - 2, Math.max(2, size * 0.2));
-        ctx.strokeStyle = "#0c0e12";
-        ctx.lineWidth = 1.3;
-        ctx.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
-        ctx.fillStyle = "#0c0e12";
-        ctx.fillRect(px + size * 0.42, py + size * 0.28, size * 0.16, size * 0.44);
-        ctx.lineWidth = 1;
-        return;
-      }
       var s = size + 0.5;
       var plate = ctx.createLinearGradient(px, py, px, py + s);
       plate.addColorStop(0, "#efe0c4");
@@ -2776,6 +2764,98 @@
       rivetAt(px + s - 14, py + 12, 2.4);
       rivetAt(px + 14, py + s - 18, 2.4);
       rivetAt(px + s - 14, py + s - 18, 2.4);
+      var doorFace = ctx.createLinearGradient(px, py + s - 8, px, py + s);
+      doorFace.addColorStop(0, "#8a6244");
+      doorFace.addColorStop(1, "#3a2416");
+      ctx.fillStyle = doorFace;
+      ctx.fillRect(px + 2, py + s - 8, s - 4, 8);
+      ctx.lineWidth = 1;
+    }
+
+    /* 0.1.3 metal wall — neighbor lips make clean corners/crosses. */
+    function drawMetalWall(px, py, size, tx, ty, step) {
+      step = step || 1;
+      var lip = Math.max(4, Math.round(size * (9 / 48)));
+      var south = !solidTile(tx, ty + step);
+      var east = !solidTile(tx + step, ty);
+      var north = !solidTile(tx, ty - step);
+      var west = !solidTile(tx - step, ty);
+      var topW = size - (east ? lip : 0);
+      var topH = size - (south ? lip : 0);
+      var plate = ctx.createLinearGradient(px, py, px + topW, py + topH);
+      plate.addColorStop(0, "#f3e6cf");
+      plate.addColorStop(0.5, "#c4a06a");
+      plate.addColorStop(1, "#8a6844");
+      ctx.fillStyle = plate;
+      ctx.fillRect(px, py, topW + 0.5, topH + 0.5);
+
+      ctx.fillStyle = "rgba(42,26,14,0.5)";
+      if (!east) ctx.fillRect(px + topW - 2, py, 2, topH);
+      if (!south) ctx.fillRect(px, py + topH - 2, topW, 2);
+
+      ctx.strokeStyle = "#1a120c";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      if (north) {
+        ctx.moveTo(px, py + 1.5);
+        ctx.lineTo(px + topW, py + 1.5);
+      }
+      if (west) {
+        ctx.moveTo(px + 1.5, py);
+        ctx.lineTo(px + 1.5, py + topH);
+      }
+      if (south) {
+        ctx.moveTo(px, py + topH - 1);
+        ctx.lineTo(px + topW, py + topH - 1);
+      }
+      if (east) {
+        ctx.moveTo(px + topW - 1, py);
+        ctx.lineTo(px + topW - 1, py + topH);
+      }
+      ctx.stroke();
+
+      var h = tileHash(tx, ty, 4);
+      if (h > 0.4 && topW > 22 && topH > 22) {
+        var inset = 7 + Math.floor(tileHash(tx, ty, 6) * 6);
+        var pw = topW - inset * 2;
+        var ph = topH - inset * 2;
+        if (pw > 8 && ph > 8) {
+          ctx.strokeStyle = "rgba(26,18,12,0.5)";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(px + inset, py + inset, pw, ph);
+          if (h > 0.72) {
+            rivetAt(px + inset + 4, py + inset + 4, 1.8);
+            rivetAt(px + inset + pw - 4, py + inset + 4, 1.8);
+          }
+        }
+      } else if (topW > 28 && topH > 28) {
+        rivetAt(px + 10, py + 10, 2);
+        rivetAt(px + topW - 10, py + 10, 2);
+      }
+
+      if (north) {
+        ctx.strokeStyle = "rgba(255,244,220,0.5)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px + 4, py + 4);
+        ctx.lineTo(px + Math.max(8, topW - 4), py + 4);
+        ctx.stroke();
+      }
+      if (south) {
+        var face = ctx.createLinearGradient(px, py + topH, px, py + size);
+        face.addColorStop(0, "#8a6244");
+        face.addColorStop(1, "#3a2416");
+        ctx.fillStyle = face;
+        ctx.fillRect(px, py + topH, topW + 0.5, lip + 0.5);
+        ctx.fillStyle = "rgba(255,220,180,0.28)";
+        ctx.fillRect(px, py + topH, topW, 2);
+      }
+      if (east) {
+        ctx.fillStyle = "#2c1b12";
+        ctx.fillRect(px + topW, py, lip + 0.5, size + 0.5);
+        ctx.fillStyle = "rgba(255,220,180,0.12)";
+        ctx.fillRect(px + topW, py, 2, size);
+      }
       ctx.lineWidth = 1;
     }
 
@@ -3135,46 +3215,33 @@
     }
 
     function drawDoorBeam(x0, y0, bw, bh, horiz, colour) {
-      /* Thin metal shutter + key colour lamp — not the thick wall-door sheet. */
-      var thick = horiz ? Math.min(bh, 10) : Math.min(bw, 10);
-      var gx = horiz ? x0 : x0 + (bw - thick) * 0.5;
-      var gy = horiz ? y0 + (bh - thick) * 0.5 : y0;
-      var gw = horiz ? bw : thick;
-      var gh = horiz ? thick : bh;
-      var gate = ctx.createLinearGradient(gx, gy, gx + (horiz ? 0 : gw), gy + (horiz ? gh : 0));
-      gate.addColorStop(0, "#4b5563");
-      gate.addColorStop(0.45, "#1f2937");
-      gate.addColorStop(1, "#0b0f14");
-      ctx.fillStyle = gate;
-      ctx.fillRect(gx, gy, gw, gh);
-      ctx.strokeStyle = "#030712";
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(gx + 0.5, gy + 0.5, gw - 1, gh - 1);
-      ctx.strokeStyle = "rgba(255,255,255,0.1)";
-      ctx.lineWidth = 1;
-      var i;
-      if (horiz) {
-        for (i = 6; i < gw - 4; i += 8) {
-          ctx.beginPath();
-          ctx.moveTo(gx + i, gy + 1);
-          ctx.lineTo(gx + i, gy + gh - 1);
-          ctx.stroke();
-        }
-      } else {
-        for (i = 6; i < gh - 4; i += 8) {
-          ctx.beginPath();
-          ctx.moveTo(gx + 1, gy + i);
-          ctx.lineTo(gx + gw - 1, gy + i);
-          ctx.stroke();
-        }
-      }
+      /* Bold key-coloured gate — readable at MACRO size. Door art is a frame. */
       var lamp = colour || ORANGE;
+      ctx.fillStyle = "#0b0f14";
+      ctx.fillRect(x0, y0, bw, bh);
       ctx.fillStyle = lamp;
-      if (horiz) ctx.fillRect(gx + gw * 0.5 - 4, gy + 1, 8, Math.max(2, gh - 2));
-      else ctx.fillRect(gx + 1, gy + gh * 0.5 - 4, Math.max(2, gw - 2), 8);
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
-      if (horiz) ctx.fillRect(gx + gw * 0.5 - 2, gy + 2, 4, 1.5);
-      else ctx.fillRect(gx + 2, gy + gh * 0.5 - 2, 1.5, 4);
+      ctx.globalAlpha = 0.28;
+      ctx.fillRect(x0 + 3, y0 + 3, bw - 6, bh - 6);
+      ctx.globalAlpha = 1;
+      if (readyImg(doorArt)) {
+        ctx.save();
+        if (!horiz) {
+          ctx.translate(x0 + bw * 0.5, y0 + bh * 0.5);
+          ctx.rotate(Math.PI * 0.5);
+          ctx.drawImage(doorArt, -bh * 0.5, -bw * 0.5, bh, bw);
+        } else {
+          ctx.drawImage(doorArt, x0, y0, bw, bh);
+        }
+        ctx.restore();
+      }
+      ctx.strokeStyle = lamp;
+      ctx.lineWidth = Math.max(4, Math.min(bw, bh) * 0.18);
+      ctx.strokeRect(x0 + 1, y0 + 1, bw - 2, bh - 2);
+      var pad = Math.max(4, Math.min(bw, bh) * 0.2);
+      ctx.fillStyle = lamp;
+      ctx.fillRect(x0 + pad, y0 + bh * 0.42, bw - pad * 2, Math.max(4, bh * 0.16));
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillRect(x0 + pad + 2, y0 + bh * 0.42 + 1, (bw - pad * 2) * 0.35, 2);
       ctx.lineWidth = 1;
     }
 
@@ -3187,134 +3254,46 @@
           if (!closedDoorCell(x, y) || seen[x + "," + y]) continue;
           var tile = map.tiles[y][x];
           var colour = colours[tile.colour] || ORANGE;
-          var e = closedDoorCell(x + 1, y);
-          var wNbr = closedDoorCell(x - 1, y);
-          var n = closedDoorCell(x, y - 1);
-          var s = closedDoorCell(x, y + 1);
-          var horiz = e || wNbr || (!n && !s);
-          if (horiz) {
-            var xL = x;
-            var xR = x;
-            while (closedDoorCell(xL - 1, y)) xL--;
-            while (closedDoorCell(xR + 1, y)) xR++;
+          var xL = x;
+          var xR = x;
+          while (closedDoorCell(xL - 1, y)) xL--;
+          while (closedDoorCell(xR + 1, y)) xR++;
+          var yT = y;
+          var yB = y;
+          function doorRowSolid(ry) {
             var xi;
-            for (xi = xL; xi <= xR; xi++) seen[xi + "," + y] = 1;
-            drawDoorBeam(xL * t, y * t, (xR - xL + 1) * t, t, true, colour);
-          } else {
-            var yT = y;
-            var yB = y;
-            while (closedDoorCell(x, yT - 1)) yT--;
-            while (closedDoorCell(x, yB + 1)) yB++;
-            var yi;
-            for (yi = yT; yi <= yB; yi++) seen[x + "," + yi] = 1;
-            drawDoorBeam(x * t, yT * t, t, (yB - yT + 1) * t, false, colour);
+            for (xi = xL; xi <= xR; xi++) if (!closedDoorCell(xi, ry)) return false;
+            return true;
           }
+          while (doorRowSolid(yT - 1)) yT--;
+          while (doorRowSolid(yB + 1)) yB++;
+          var yi;
+          for (yi = yT; yi <= yB; yi++) {
+            var xi;
+            for (xi = xL; xi <= xR; xi++) seen[xi + "," + yi] = 1;
+          }
+          var bw = (xR - xL + 1) * t;
+          var bh = (yB - yT + 1) * t;
+          drawDoorBeam(xL * t, yT * t, bw, bh, bw >= bh, colour);
         }
-      }
-    }
-
-    /* Vertical wall art, tiled along the run. Rotated for horizontal runs. */
-    function drawWallStrip(x, y, bw, bh, horiz) {
-      var img = wallVert;
-      var thick = horiz ? bh : bw;
-      var length = horiz ? bw : bh;
-      var scale = thick / img.naturalWidth;
-      if (!(scale > 0) || !(length > 0)) return;
-      var seg = img.naturalHeight * scale;
-      if (!(seg > 0.5)) {
-        ctx.drawImage(img, x, y, thick, length);
-        return;
-      }
-      var pos = 0;
-      var guard = 0;
-      while (pos < length - 0.25 && guard++ < 256) {
-        var drawLen = Math.min(seg, length - pos);
-        if (!(drawLen > 0.25)) break;
-        var srcH = img.naturalHeight * (drawLen / seg);
-        if (!horiz) {
-          ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, x, y + pos, thick, drawLen);
-        } else {
-          ctx.save();
-          ctx.translate(x + pos + drawLen * 0.5, y + thick * 0.5);
-          ctx.rotate(-Math.PI * 0.5);
-          ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, -thick * 0.5, -drawLen * 0.5, thick, drawLen);
-          ctx.restore();
-        }
-        pos += drawLen;
       }
     }
 
     function drawMetalBeam(x0, y0, bw, bh, horiz) {
-      if (readyImg(wallVert)) {
-        drawWallStrip(x0, y0, bw, bh, horiz);
-        return;
-      }
-      if (readyImg(wallArt) && horiz) {
-        ctx.drawImage(wallArt, x0, y0, bw, bh);
-        return;
-      }
+      /* Solid underlay so corridor crossings never show floor through seams. */
       ctx.fillStyle = wallConcrete() || "#5a5652";
       ctx.fillRect(x0, y0, bw, bh);
-    }
-
-    function drawWallRuns(x0, y0, x1, y1, t) {
-      var seen = Object.create(null);
-      var y;
-      for (y = y0; y <= y1; y++) {
-        var x;
-        for (x = x0; x <= x1; x++) {
-          if (!wallCell(x, y) || seen[x + "," + y]) continue;
-          var e = wallCell(x + 1, y);
-          var wNbr = wallCell(x - 1, y);
-          var n = wallCell(x, y - 1);
-          var s = wallCell(x, y + 1);
-          var horiz = e || wNbr || (!n && !s);
-          if (horiz) {
-            var xL = x;
-            var xR = x;
-            while (wallCell(xL - 1, y)) xL--;
-            while (wallCell(xR + 1, y)) xR++;
-            var yT = y;
-            var yB = y;
-            function rowSolid(ry) {
-              var xi;
-              for (xi = xL; xi <= xR; xi++) if (!wallCell(xi, ry)) return false;
-              return true;
-            }
-            while (rowSolid(yT - 1)) yT--;
-            while (rowSolid(yB + 1)) yB++;
-            var yi;
-            for (yi = yT; yi <= yB; yi++) {
-              var xi;
-              for (xi = xL; xi <= xR; xi++) seen[xi + "," + yi] = 1;
-            }
-            var bwH = (xR - xL + 1) * t;
-            var bhH = (yB - yT + 1) * t;
-            drawMetalBeam(xL * t, yT * t, bwH, bhH, bwH >= bhH);
-          } else {
-            var yT2 = y;
-            var yB2 = y;
-            while (wallCell(x, yT2 - 1)) yT2--;
-            while (wallCell(x, yB2 + 1)) yB2++;
-            var xL2 = x;
-            var xR2 = x;
-            function colSolid(cx) {
-              var yi;
-              for (yi = yT2; yi <= yB2; yi++) if (!wallCell(cx, yi)) return false;
-              return true;
-            }
-            while (colSolid(xL2 - 1)) xL2--;
-            while (colSolid(xR2 + 1)) xR2++;
-            var yi2;
-            for (yi2 = yT2; yi2 <= yB2; yi2++) {
-              var xi2;
-              for (xi2 = xL2; xi2 <= xR2; xi2++) seen[xi2 + "," + yi2] = 1;
-            }
-            var bwV = (xR2 - xL2 + 1) * t;
-            var bhV = (yB2 - yT2 + 1) * t;
-            drawMetalBeam(xL2 * t, yT2 * t, bwV, bhV, bwV >= bhV);
-          }
-        }
+      var img = readyImg(wallArt) ? wallArt : (readyImg(wallVert) ? wallVert : null);
+      if (!img) return;
+      /* Stretch Dave's wall.jpg into the cell — no long-run tiling, no joins. */
+      if (horiz) {
+        ctx.drawImage(img, x0, y0, bw, bh);
+      } else {
+        ctx.save();
+        ctx.translate(x0 + bw * 0.5, y0 + bh * 0.5);
+        ctx.rotate(Math.PI * 0.5);
+        ctx.drawImage(img, -bh * 0.5, -bw * 0.5, bh, bw);
+        ctx.restore();
       }
     }
 
@@ -3325,13 +3304,54 @@
       return wallCell(x, y);
     }
 
-    /* L / T / + pieces, anchored on the wall centreline. */
+    function wallArmature(ax, ay, macro) {
+      var n = blockIsWall(ax, ay - 1, macro);
+      var s = blockIsWall(ax, ay + 1, macro);
+      var e = blockIsWall(ax + 1, ay, macro);
+      var w = blockIsWall(ax - 1, ay, macro);
+      var arms = (n ? 1 : 0) + (s ? 1 : 0) + (e ? 1 : 0) + (w ? 1 : 0);
+      var straight = arms === 2 && ((n && s) || (e && w));
+      return {
+        n: n, s: s, e: e, w: w, arms: arms, straight: straight,
+        junction: arms >= 3 || (arms === 2 && !straight)
+      };
+    }
+
+    function drawMetalWallGrid(x0, y0, x1, y1, t, colours) {
+      if (!map) return;
+      var macro = map.macro || 1;
+      var size = macro * t;
+      var ax0 = Math.max(0, Math.floor(x0 / macro));
+      var ay0 = Math.max(0, Math.floor(y0 / macro));
+      var ax1 = Math.min(Math.floor((map.cols - 1) / macro), Math.floor(x1 / macro));
+      var ay1 = Math.min(Math.floor((map.rows - 1) / macro), Math.floor(y1 / macro));
+      var ay;
+      for (ay = ay0; ay <= ay1; ay++) {
+        var ax;
+        for (ax = ax0; ax <= ax1; ax++) {
+          var tx = ax * macro;
+          var ty = ay * macro;
+          if (wallCell(tx, ty)) {
+            drawMetalWall(tx * t, ty * t, size, tx, ty, macro);
+          } else if (closedDoorCell(tx, ty)) {
+            var tile = map.tiles[ty][tx];
+            drawMetalDoor(tx * t, ty * t, size, colours[tile.colour] || ORANGE);
+          }
+        }
+      }
+    }
+
+    /* L / T / + pieces. Clip so long arms don't paint into open corridors. */
     function drawJoinSprite(img, cx, cy, rot, ax, ay, armPx, thick) {
       if (!readyImg(img)) return;
       var scale = thick / armPx;
       var dw = img.naturalWidth * scale;
       var dh = img.naturalHeight * scale;
+      var clip = thick * 1.55;
       ctx.save();
+      ctx.beginPath();
+      ctx.rect(cx - clip, cy - clip, clip * 2, clip * 2);
+      ctx.clip();
       ctx.translate(cx, cy);
       ctx.rotate(rot);
       ctx.drawImage(img, -ax * dw, -ay * dh, dw, dh);
@@ -3346,38 +3366,39 @@
       var ay0 = Math.max(0, Math.floor(y0 / macro) - 1);
       var ax1 = Math.min(Math.floor((map.cols - 1) / macro), Math.floor(x1 / macro) + 1);
       var ay1 = Math.min(Math.floor((map.rows - 1) / macro), Math.floor(y1 / macro) + 1);
+      var concrete = wallConcrete() || "#5a5652";
       var ay;
       for (ay = ay0; ay <= ay1; ay++) {
         var ax;
         for (ax = ax0; ax <= ax1; ax++) {
           if (!blockIsWall(ax, ay, macro)) continue;
-          var n = blockIsWall(ax, ay - 1, macro);
-          var s = blockIsWall(ax, ay + 1, macro);
-          var e = blockIsWall(ax + 1, ay, macro);
-          var w = blockIsWall(ax - 1, ay, macro);
-          var arms = (n ? 1 : 0) + (s ? 1 : 0) + (e ? 1 : 0) + (w ? 1 : 0);
-          if (arms < 2 || (arms === 2 && ((n && s) || (e && w)))) continue;
-          var cx = (ax * macro + macro * 0.5) * t;
-          var cy = (ay * macro + macro * 0.5) * t;
-          if (arms === 4) {
-            drawJoinSprite(joinX, cx, cy, 0, 598.5 / 1199, 576.5 / 1217, 110, thick);
+          var arms = wallArmature(ax, ay, macro);
+          if (!arms.junction) continue;
+          var px = ax * macro * t;
+          var py = ay * macro * t;
+          ctx.fillStyle = concrete;
+          ctx.fillRect(px, py, thick, thick);
+          var cx = px + thick * 0.5;
+          var cy = py + thick * 0.5;
+          if (arms.arms === 4) {
+            drawJoinSprite(joinX, cx, cy, 0, 598.5 / 1199, 576.5 / 1217, 119, thick);
             continue;
           }
-          if (arms === 3) {
+          if (arms.arms === 3) {
             var rotT = 0;
-            if (!n) rotT = 0;
-            else if (!e) rotT = Math.PI * 0.5;
-            else if (!s) rotT = Math.PI;
+            if (!arms.n) rotT = 0;
+            else if (!arms.e) rotT = Math.PI * 0.5;
+            else if (!arms.s) rotT = Math.PI;
             else rotT = -Math.PI * 0.5;
-            drawJoinSprite(joinT, cx, cy, rotT, 546.5 / 1094, 52 / 984, 104, thick);
+            drawJoinSprite(joinT, cx, cy, rotT, 546.5 / 1094, 52 / 984, 106, thick);
             continue;
           }
           var rotL = 0;
-          if (e && s) rotL = 0;
-          else if (s && w) rotL = Math.PI * 0.5;
-          else if (w && n) rotL = Math.PI;
+          if (arms.e && arms.s) rotL = 0;
+          else if (arms.s && arms.w) rotL = Math.PI * 0.5;
+          else if (arms.w && arms.n) rotL = Math.PI;
           else rotL = -Math.PI * 0.5;
-          drawJoinSprite(joinL, cx, cy, rotL, 62 / 897, 66 / 1001, 124, thick);
+          drawJoinSprite(joinL, cx, cy, rotL, 62 / 897, 66 / 1001, 125, thick);
         }
       }
     }
@@ -3498,10 +3519,8 @@
           }
         }
       }
-      /* Doors under props; walls redrawn after mobile enemies so concrete
-       * occludes oversized sprites instead of robots painting "through" walls. */
-      drawDoorRuns(x0, y0, x1, y1, t, colours);
-
+      /* Props / mobiles first; walls then doors on top so doors stay visible
+       * and join pieces no longer bleed into corridor crossings. */
       var viewL = drawCamX - 48;
       var viewT = drawCamY - 48;
       var viewR = drawCamX + w + 48;
@@ -3541,8 +3560,8 @@
         drawEnemy(enemies[i]);
       }
 
-      drawWallRuns(x0, y0, x1, y1, t);
-      drawWallJoins(x0, y0, x1, y1, t);
+      /* 0.1.3 walls/doors — one MACRO cell each, neighbor lips for corners. */
+      drawMetalWallGrid(x0, y0, x1, y1, t, colours);
 
       for (i = 0; i < enemies.length; i++) {
         if (enemies[i].kind !== "tower") continue;

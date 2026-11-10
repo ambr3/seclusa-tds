@@ -11,7 +11,7 @@ Offline PWA. Data stays on the device; nothing is sent anywhere.
 
 ## What it does
 
-- Version 0.1.45
+- Version 0.1.49
 - Twenty fortress decks, from the crash site to the salvage bay
 - Keycards, doors, ammo crates, shootable credit scrap, side caches, and a salvage terminal
 - Pistol, scatter, auto, rifle, and lance, plus dash, breach, and a hull patch
