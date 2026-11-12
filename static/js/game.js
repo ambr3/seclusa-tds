@@ -195,7 +195,6 @@
     var lastInput = null;
     var toastMsg = "";
     var toastLife = 0;
-    var shopOpen = false;
     var flash = 0;
     var shake = 0;
     var hitMarks = [];
@@ -429,7 +428,6 @@
       bullets.length = 0;
       enemyShots.length = 0;
       enemies.length = 0;
-      shopOpen = false;
       spawnWait = 1.4 * mods.spawn;
       spawnEvery = SPAWN_START * mods.spawn;
       if (!keepGear) {
@@ -1015,7 +1013,6 @@
         else if (e.kind === "fortress") assignPost(e);
         enemies.push(e);
       }
-      shopOpen = false;
       spawnWait = 1.2;
       updateCamera();
       showToast(patchRun ? "Hold E at the wreck" : map.name);
@@ -1026,7 +1023,6 @@
       var snap = snapshotRun();
       playing = false;
       paused = false;
-      shopOpen = false;
       persistProgress({
         suspended: snap,
         bestScore: score,
@@ -1156,7 +1152,6 @@
       over = true;
       playing = false;
       paused = false;
-      shopOpen = false;
       won = !!didWin;
       persistProgress({
         bestScore: score,
@@ -1349,7 +1344,7 @@
           var ci;
           for (ci = 0; ci < map.lootCrates.length; ci++) {
             var box = map.lootCrates[ci];
-            if (box.taken) continue;
+            if (box.taken || !box.shootable) continue;
             if (circlesHit(b.x, b.y, b.r, box.x, box.y, 14)) {
               box.taken = true;
               hitMarks.push({ x: box.x, y: box.y, life: 0.3 });
@@ -2024,7 +2019,6 @@
     var ROBOT_DIR_MAP = [4, 5, 6, 7, 0, 1, 2, 3];
     var grassStamp = null;
     var floorStamp = null;
-    var cornerArt = null;
     var doorArt = null;
     var crateArt = null;
     var barrelArt = null;
@@ -2046,7 +2040,7 @@
       img.src = "static/textures/" + file;
     }
 
-    /* Art cut from docs/ — floors and walls swap per deck. */
+    /* Floors and walls swap per deck. */
     (function loadGroundParts() {
       var i;
       for (i = 0; i < 8; i++) {
@@ -2059,12 +2053,8 @@
           loadImg("pilot-dir-" + idx + ".png", function (img) { pilotFrames[idx] = img; });
         })(i);
       }
-      /* wall-straight.png = Dave's wall.jpg (top-down blocks). wall.png is an
-       * older side strip that reads as pipes when stretched — keep as fallback. */
+      /* wall-straight.png = Dave's wall.jpg (top-down blocks). */
       loadImg("wall-straight.png", function (img) { wallArt = img; });
-      loadImg("wall.png", function (img) {
-        if (!wallArt) wallArt = img;
-      });
       loadImg("wall-vert.png", function (img) {
         wallVertClean = img;
         if (!wallVert) wallVert = img;
@@ -2096,7 +2086,6 @@
       ].forEach(function (name) {
         loadImg("prop-" + name + ".png", function (img) { propArts[name] = img; });
       });
-      loadImg("wall-corner.png", function (img) { cornerArt = img; });
       loadImg("wall-door.png", function (img) { doorArt = img; });
       loadImg("crate.png", function (img) { crateArt = img; });
       loadImg("barrel.png", function (img) { barrelArt = img; });
@@ -3027,23 +3016,9 @@
       ctx.lineWidth = 1;
     }
 
-    function drawWorldLabel(x, y, text, fill) {
-      ctx.save();
-      ctx.font = "800 9px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = "rgba(12,10,8,0.9)";
-      ctx.strokeText(text, x, y - 22);
-      ctx.fillStyle = fill || "#fff7ed";
-      ctx.fillText(text, x, y - 22);
-      ctx.restore();
-    }
-
     function drawAmmoCrate(x, y) {
       if (readyImg(barrelArt)) {
         ctx.drawImage(barrelArt, x - 16, y - 16, 32, 32);
-        drawWorldLabel(x, y, "AMMO", ORANGE);
         return;
       }
       ctx.save();
@@ -3081,13 +3056,19 @@
       rivetAt(11, 8, 1.8);
       ctx.lineWidth = 1;
       ctx.restore();
-      drawWorldLabel(x, y, "AMMO", ORANGE);
     }
 
-    function drawLootCrate(x, y) {
-      if (readyImg(crateArt)) {
+    function drawLootCrate(x, y, shootable) {
+      /* Shootable scrap is brighter yellow; sealed clutter stays dull brown. */
+      if (readyImg(crateArt) && !shootable) {
+        ctx.save();
+        ctx.globalAlpha = 0.92;
         ctx.drawImage(crateArt, x - 18, y - 18, 36, 36);
-        drawWorldLabel(x, y, "LOOT", YELLOW);
+        ctx.restore();
+        return;
+      }
+      if (readyImg(crateArt) && shootable) {
+        ctx.drawImage(crateArt, x - 18, y - 18, 36, 36);
         return;
       }
       ctx.save();
@@ -3098,9 +3079,15 @@
       ctx.ellipse(1, 7, 14, 6, 0, 0, Math.PI * 2);
       ctx.fill();
       var scrap = ctx.createLinearGradient(-14, -12, 14, 12);
-      scrap.addColorStop(0, "#f0e2a0");
-      scrap.addColorStop(0.5, "#c9a227");
-      scrap.addColorStop(1, "#7a5c12");
+      if (shootable) {
+        scrap.addColorStop(0, "#f0e2a0");
+        scrap.addColorStop(0.5, "#c9a227");
+        scrap.addColorStop(1, "#7a5c12");
+      } else {
+        scrap.addColorStop(0, "#a89880");
+        scrap.addColorStop(0.5, "#6b5a45");
+        scrap.addColorStop(1, "#3f3428");
+      }
       ctx.fillStyle = scrap;
       roundPlate(-14, -12, 28, 24, 3);
       ctx.fill();
@@ -3110,21 +3097,10 @@
       ctx.fillStyle = "#1a120c";
       ctx.fillRect(-14, -2, 28, 3);
       ctx.fillRect(-2, -12, 4, 24);
-      ctx.fillStyle = "#fff7d6";
-      ctx.font = "800 9px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("LOOT", 0, 1);
-      ctx.strokeStyle = "#1a120c";
-      ctx.lineWidth = 1.2;
-      ctx.strokeText("LOOT", 0, 1);
-      ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
       rivetAt(-10, -8, 1.5);
       rivetAt(10, -8, 1.5);
       ctx.lineWidth = 1;
       ctx.restore();
-      drawWorldLabel(x, y, "LOOT", YELLOW);
     }
 
     function drawHealthBooth(x, y, used) {
@@ -3144,7 +3120,6 @@
       ctx.fillRect(-3, -8, 6, 14);
       ctx.fillRect(-8, -3, 16, 6);
       ctx.restore();
-      drawWorldLabel(x, y, used ? "USED" : "HEALTH", used ? "#94a3b8" : "#fda4af");
     }
 
     function drawGunPickup(x, y, gunId) {
@@ -3168,8 +3143,18 @@
       ctx.fillStyle = ORANGE;
       ctx.fillRect(-10, -3, 20, 5);
       ctx.strokeRect(-10, -3, 20, 5);
+      /* Name sits on the plate — never a floating label that walls clip. */
+      ctx.fillStyle = "#fff7ed";
+      ctx.font = "800 7px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.strokeStyle = "#1a120c";
+      ctx.lineWidth = 2.5;
+      ctx.strokeText(label, 0, -6);
+      ctx.fillText(label, 0, -6);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
       ctx.restore();
-      drawWorldLabel(x, y, label, ORANGE);
     }
 
     function drawTowerCannon(cx, cy) {
@@ -3291,9 +3276,14 @@
       ctx.strokeStyle = "#1a120c";
       ctx.lineWidth = 2;
       ctx.stroke();
+      ctx.fillStyle = "#1a120c";
+      ctx.font = "800 7px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(cache.kind === "patch" ? "HULL" : "AMMO", 0, 1);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
       ctx.restore();
-      drawWorldLabel(cache.x, cache.y, cache.kind === "patch" ? "HULL" : "AMMO",
-        cache.kind === "patch" ? TEAL : ORANGE);
     }
 
     function drawMinimap(text, dim, danger, colours) {
@@ -3686,7 +3676,11 @@
       }
       for (var cri = 0; cri < (map.lootCrates || []).length; cri++) {
         if (map.lootCrates[cri].taken) continue;
-        drawLootCrate(map.lootCrates[cri].x, map.lootCrates[cri].y);
+        drawLootCrate(
+          map.lootCrates[cri].x,
+          map.lootCrates[cri].y,
+          !!map.lootCrates[cri].shootable
+        );
       }
       for (var hi = 0; hi < (map.healthBooths || []).length; hi++) {
         drawHealthBooth(map.healthBooths[hi].x, map.healthBooths[hi].y, !!map.healthBooths[hi].used);
@@ -3927,8 +3921,7 @@
       stop: function () {
         playing = false;
         paused = false;
-        shopOpen = false;
-      },
+        },
       suspend: suspend,
       update: update,
       render: render,
@@ -3948,8 +3941,14 @@
         if (owned.hull) gearBits.push("Patch");
         for (gi = 0; gi < GUN_ORDER.length; gi++) {
           var gid = GUN_ORDER[gi];
-          if (!owned[gid] || !WEAPONS[gid]) continue;
-          guns.push({ id: gid, name: WEAPONS[gid].name, active: weaponId === gid });
+          if (!WEAPONS[gid]) continue;
+          guns.push({
+            id: gid,
+            key: gi + 1,
+            name: WEAPONS[gid].name,
+            owned: !!owned[gid],
+            active: weaponId === gid
+          });
         }
         return {
           score: score,

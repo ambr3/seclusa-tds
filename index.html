@@ -17,9 +17,9 @@
 
   <title>Seclusa Lockdown</title>
 
-  <script src="static/js/theme-boot.js?v=0.1.53"></script>
+  <script src="static/js/theme-boot.js?v=0.1.54"></script>
   <link rel="stylesheet" href="static/css/seclusa-base.css">
-  <link rel="stylesheet" href="static/css/app.css?v=0.1.53">
+  <link rel="stylesheet" href="static/css/app.css?v=0.1.54">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="static/icons/icon-192.png">
@@ -30,26 +30,27 @@
   <div class="topbar-row">
     <button type="button" class="accentpill" id="btn-settings" aria-haspopup="dialog" aria-controls="sheet-settings">Settings</button>
     <button type="button" class="accentpill" id="btn-main-menu">Menu</button>
-    <h1 class="brand">Seclusa Lockdown</h1>
+    <h1 class="brand" id="top-brand">Seclusa Lockdown</h1>
+    <div class="playhud" id="playhud" hidden>
+      <div class="playhud-vitals" aria-label="Status">
+        <span class="playhud-stat" id="hud-hp"><em>HP</em><b>5</b></span>
+        <span class="playhud-stat" id="hud-ammo"><em>Ammo</em><b>80</b></span>
+        <span class="playhud-stat" id="hud-score"><em>Score</em><b>0</b></span>
+      </div>
+      <div class="playhud-guns" id="hud-guns" aria-label="Weapons"></div>
+      <div class="playhud-meta">
+        <span class="playhud-cards" aria-label="Keycards">
+          <i id="hud-card-R" data-card="R" title="Red"></i>
+          <i id="hud-card-G" data-card="G" title="Green"></i>
+          <i id="hud-card-B" data-card="B" title="Blue"></i>
+        </span>
+        <span id="hud-gear" class="playhud-gear" hidden></span>
+        <span id="hud-deck" class="playhud-deck"></span>
+      </div>
+    </div>
     <button type="button" class="accentpill" id="btn-theme" aria-haspopup="dialog" aria-controls="sheet-theme">Theme</button>
   </div>
 </header>
-
-<div class="playhud" id="playhud" hidden>
-  <span id="hud-score">Score 0</span>
-  <span id="hud-hp">HP 5</span>
-  <span id="hud-ammo">Ammo 80</span>
-  <span class="playhud-guns" id="hud-guns" aria-label="Weapons">
-    <button type="button" class="hud-gun on" data-gun="pistol" aria-pressed="true">Pistol</button>
-  </span>
-  <span id="hud-deck"></span>
-  <span class="playhud-cards" aria-label="Cards">
-    <i id="hud-card-R" data-card="R"></i>
-    <i id="hud-card-G" data-card="G"></i>
-    <i id="hud-card-B" data-card="B"></i>
-  </span>
-  <span id="hud-gear" hidden></span>
-</div>
 
 <main class="stage" id="stage">
   <canvas id="game" width="800" height="600" aria-label="Fortress decks"></canvas>
@@ -133,13 +134,13 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="static/js/store.js?v=0.1.53"></script>
-<script src="static/js/theme.js?v=0.1.53"></script>
-<script src="static/js/settings.js?v=0.1.53"></script>
-<script src="static/js/audio.js?v=0.1.53"></script>
-<script src="static/js/map.js?v=0.1.53"></script>
-<script src="static/js/input.js?v=0.1.53"></script>
-<script src="static/js/game.js?v=0.1.53"></script>
-<script src="static/js/app.js?v=0.1.53"></script>
+<script src="static/js/store.js?v=0.1.54"></script>
+<script src="static/js/theme.js?v=0.1.54"></script>
+<script src="static/js/settings.js?v=0.1.54"></script>
+<script src="static/js/audio.js?v=0.1.54"></script>
+<script src="static/js/map.js?v=0.1.54"></script>
+<script src="static/js/input.js?v=0.1.54"></script>
+<script src="static/js/game.js?v=0.1.54"></script>
+<script src="static/js/app.js?v=0.1.54"></script>
 </body>
 </html>

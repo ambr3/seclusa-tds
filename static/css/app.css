@@ -37,8 +37,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 52px;
-  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+  min-height: 48px;
+  padding: max(6px, env(safe-area-inset-top)) 10px 6px;
 }
 
 .brand {
@@ -52,12 +52,13 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.brand[hidden] { display: none !important; }
 
 button.accentpill {
   flex: none;
-  height: 34px;
-  min-width: 52px;
-  padding: 0 14px;
+  height: 32px;
+  min-width: 48px;
+  padding: 0 12px;
   border-radius: 999px;
   background: var(--accent);
   color: var(--accent-text);
@@ -68,60 +69,137 @@ button.accentpill {
 button.accentpill:hover { filter: brightness(1.08); }
 button.accentpill:active { transform: scale(.96); }
 
-/* ---------------------------------------------------------------- play hud */
-
+/* Play status lives in the same topbar row (replaces the title while playing). */
 .playhud {
-  flex: none;
+  flex: 1;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 4px 12px;
-  min-height: 34px;
-  padding: 6px 12px;
-  background: #efe0c4;
-  color: #1a120c;
-  border-bottom: 3px solid #1a120c;
-  font: 700 13px/1.2 system-ui, sans-serif;
-  z-index: 60;
+  gap: 8px 12px;
+  min-width: 0;
+  margin: 0 4px;
+  padding: 0;
+  font: 600 12px/1.2 system-ui, sans-serif;
+  color: var(--text);
+  overflow: hidden;
 }
-.playhud[hidden] { display: none; }
-.playhud .is-low { color: var(--danger, #f2857c); }
-.playhud-guns { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.playhud[hidden] { display: none !important; }
+
+.playhud-vitals,
+.playhud-guns,
+.playhud-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: none;
+}
+.playhud-vitals { gap: 8px; }
+.playhud-guns {
+  flex: 1;
+  justify-content: center;
+  overflow: hidden;
+}
+.playhud-meta {
+  gap: 8px;
+  margin-left: auto;
+}
+
+.playhud-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+.playhud-stat em {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.playhud-stat b {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.playhud-stat.is-low b { color: var(--danger, #e11d48); }
+
 .hud-gun {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   margin: 0;
-  padding: 2px 8px;
-  border: 2px solid #1a120c;
-  border-radius: 6px;
-  background: transparent;
-  color: #5c4633;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 7px;
+  background: var(--surface-2, var(--bg));
+  color: var(--text);
   font: inherit;
   cursor: pointer;
 }
+.hud-gun-key {
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.hud-gun-name { display: none; font-size: 11px; font-weight: 700; }
 .hud-gun.on {
-  background: #c2410c;
-  border-color: #9a3412;
-  color: #fff7ed;
+  background: var(--accent, #f97316);
+  border-color: transparent;
+  color: var(--accent-text, #1a120c);
+  padding: 0 8px;
 }
-.hud-gun:focus-visible { outline: 2px solid #1a120c; outline-offset: 1px; }
-#hud-deck {
-  min-width: 0;
-  color: #5c4633;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.hud-gun.on .hud-gun-key,
+.hud-gun.on .hud-gun-name { color: inherit; }
+.hud-gun.on .hud-gun-name { display: inline; }
+.hud-gun.locked {
+  opacity: 0.35;
+  cursor: default;
+  padding: 0;
+  min-width: 26px;
 }
-.playhud-cards { display: inline-flex; gap: 6px; align-items: center; }
+.hud-gun:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.hud-gun.locked:focus-visible { outline: none; }
+
+.playhud-cards { display: inline-flex; gap: 4px; align-items: center; }
 .playhud-cards i {
-  width: 18px;
-  height: 12px;
+  width: 12px;
+  height: 9px;
   border: 1.5px solid currentColor;
   border-radius: 2px;
-  opacity: 0.35;
+  opacity: 0.28;
 }
 .playhud-cards i[data-card="R"] { color: #e11d48; }
 .playhud-cards i[data-card="G"] { color: #16a34a; }
 .playhud-cards i[data-card="B"] { color: #2563eb; }
 .playhud-cards i.on { opacity: 1; background: currentColor; }
-#hud-gear { color: #2f8f8a; }
+
+.playhud-gear {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.playhud-deck {
+  max-width: 9rem;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 820px) {
+  .playhud-deck { display: none; }
+  .playhud-stat em { display: none; }
+}
 
 /* ---------------------------------------------------------------- stage */
 
@@ -274,32 +352,6 @@ button.accentpill:active { transform: scale(.96); }
   letter-spacing: 0.08em;
 }
 
-.shop-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 14px 8px;
-}
-
-.shop-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 48px;
-  padding: 0 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  font: inherit;
-  font-weight: 600;
-  color: var(--text);
-  text-align: left;
-}
-.shop-item:hover:not(:disabled) { filter: brightness(1.05); }
-.shop-item:disabled { opacity: 0.55; cursor: default; }
-.shop-tag { color: var(--text-dim); font-size: 13px; }
-.shop-actions { padding: 8px 14px 16px; }
 
 .btn {
   display: inline-flex;

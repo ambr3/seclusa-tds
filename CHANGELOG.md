@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.54] - 2026-11-12
+
+- Cleanup: drop unused textures/sheets, docs/ DOS sources, and dead shop code. Single top bar for chrome + HUD. Only some scrap boxes shoot open; no floating world labels that walls clip.
+
 ## [0.1.53] - 2026-11-12
 
 - Removed supply terminal and credits. Shoot LOOT boxes for ammo, health, guns, and gear. Floor gun pickups, off-path HEALTH booths, clearer world labels.

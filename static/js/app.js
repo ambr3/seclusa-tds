@@ -258,10 +258,16 @@
     var i;
     for (i = 0; i < guns.length; i++) {
       var g = guns[i];
+      var locked = !g.owned;
+      var cls = "hud-gun" + (g.active && !locked ? " on" : "") + (locked ? " locked" : "");
       html.push(
-        '<button type="button" class="hud-gun' + (g.active ? " on" : "") +
-        '" data-gun="' + g.id + '" aria-pressed="' + (g.active ? "true" : "false") + '">' +
-        g.name + "</button>"
+        '<button type="button" class="' + cls + '" data-gun="' + g.id + '"' +
+        (locked ? " disabled" : "") +
+        ' aria-pressed="' + (g.active && !locked ? "true" : "false") + '"' +
+        ' title="' + (locked ? g.name + " — not found yet" : g.name + " · key " + g.key) + '">' +
+        '<span class="hud-gun-key">' + g.key + "</span>" +
+        (locked ? "" : '<span class="hud-gun-name">' + g.name + "</span>") +
+        "</button>"
       );
     }
     var next = html.join("");
@@ -270,13 +276,34 @@
     rack.innerHTML = next;
   }
 
+  function setHudStat(id, value, low) {
+    var el = $(id);
+    if (!el) return;
+    var b = el.querySelector("b");
+    if (b) b.textContent = String(value);
+    else el.textContent = String(value);
+    el.classList.toggle("is-low", !!low);
+  }
+
+  function shortDeck(name) {
+    if (!name) return "";
+    var m = /^Deck\s+(\d+)/i.exec(name);
+    if (m) {
+      var rest = name.replace(/^Deck\s+\d+\s*[—–-]\s*/i, "");
+      return rest && rest !== name ? ("D" + m[1] + " · " + rest) : ("Deck " + m[1]);
+    }
+    return name;
+  }
+
   function syncPlayHud() {
     var bar = $("playhud");
+    var brand = $("top-brand");
     if (!bar || !game || !game.hudSnapshot) return;
     var menu = $("overlay-menu");
     var menuOpen = menu && !menu.hidden && !menu.classList.contains("hidden");
     var show = game.isPlaying() && !game.isOver() && !menuOpen;
     bar.hidden = !show;
+    if (brand) brand.hidden = !!show;
     if (!show) {
       hudCache = "";
       return;
@@ -286,26 +313,30 @@
       hud.score, hud.hp, hud.ammo, hud.deck, hud.gear || "",
       hud.lowHp ? 1 : 0, hud.lowAmmo ? 1 : 0,
       hud.cards.R ? 1 : 0, hud.cards.G ? 1 : 0, hud.cards.B ? 1 : 0,
-      (hud.guns || []).map(function (g) { return g.id + (g.active ? "*" : ""); }).join(",")
+      (hud.guns || []).map(function (g) {
+        return g.id + (g.owned ? (g.active ? "*" : "+") : "-");
+      }).join(",")
     ].join("|");
     if (key === hudCache) return;
     hudCache = key;
-    $("hud-score").textContent = "Score " + hud.score;
-    var hpEl = $("hud-hp");
-    hpEl.textContent = "HP " + hud.hp;
-    hpEl.classList.toggle("is-low", hud.lowHp);
-    var ammoEl = $("hud-ammo");
-    ammoEl.textContent = "Ammo " + hud.ammo;
-    ammoEl.classList.toggle("is-low", hud.lowAmmo);
+    setHudStat("hud-score", hud.score, false);
+    setHudStat("hud-hp", hud.hp, hud.lowHp);
+    setHudStat("hud-ammo", hud.ammo, hud.lowAmmo);
     syncGunRack(hud);
-    $("hud-deck").textContent = hud.deck;
+    var deck = $("hud-deck");
+    if (deck) {
+      deck.textContent = shortDeck(hud.deck);
+      deck.title = hud.deck || "";
+    }
     ["R", "G", "B"].forEach(function (c) {
       var chip = $("hud-card-" + c);
       if (chip) chip.classList.toggle("on", !!hud.cards[c]);
     });
     var gear = $("hud-gear");
-    gear.hidden = !hud.gear;
-    gear.textContent = hud.gear;
+    if (gear) {
+      gear.hidden = !hud.gear;
+      gear.textContent = hud.gear || "";
+    }
   }
 
   function startLoop() {
@@ -357,7 +388,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.53";
+  var BUILD = "0.1.54";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;

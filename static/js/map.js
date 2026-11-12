@@ -592,9 +592,12 @@
           if (kind) spawns.push({ x: cx, y: cy, kind: kind });
           if (ch === "A") ammoCrates.push({ x: cx, y: cy, taken: false });
           if (ch === "$") {
+            var seed = ax * 3 + ay * 5 + (index || 0) * 11;
+            /* Only some scrap boxes crack open — sealed ones are just clutter. */
             lootCrates.push({
               x: cx, y: cy, taken: false,
-              seed: ax * 3 + ay * 5 + (index || 0) * 11
+              seed: seed,
+              shootable: (seed % 2) === 0
             });
           }
           if (ch === "+") healthBooths.push({ x: cx, y: cy, used: false });
@@ -636,7 +639,6 @@
       keys: keys,
       doors: doors,
       spawns: spawns,
-      terminals: [],
       ammoCrates: ammoCrates,
       lootCrates: lootCrates,
       creditCrates: lootCrates,
@@ -649,6 +651,14 @@
       caches: [],
       start: start
     };
+    if (lootCrates.length) {
+      var hasShot = false;
+      var li;
+      for (li = 0; li < lootCrates.length; li++) {
+        if (lootCrates[li].shootable) hasShot = true;
+      }
+      if (!hasShot) lootCrates[0].shootable = true;
+    }
     placeCornerTowers(level);
     if (!opts.noWallCache) carveCache(level);
     if (!level.caches.length) dropCache(level);

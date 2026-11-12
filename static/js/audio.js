@@ -66,7 +66,6 @@
     hurt: function () { beep(110, 0.18, "sawtooth", 0.05); },
     pickup: function () { beep(660, 0.09, "sine", 0.045); beep(880, 0.1, "sine", 0.03); },
     door: function () { beep(240, 0.06, "square", 0.04); beep(160, 0.12, "triangle", 0.035); },
-    shop: function () { beep(520, 0.08, "sine", 0.04); },
     exit: function () { beep(400, 0.1, "sine", 0.04); beep(600, 0.12, "sine", 0.035); },
     win: function () { beep(523, 0.12, "sine", 0.05); beep(659, 0.14, "sine", 0.045); beep(784, 0.18, "sine", 0.04); },
     thud: function () { noiseBurst(0.06, 0.04); }

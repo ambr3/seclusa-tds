@@ -555,8 +555,9 @@ if (GM.sectorCount() !== 20) throw new Error("count " + GM.sectorCount());
 
 for (let i = 0; i < 20; i++) {
   const map = GM.cloneSector(i);
-  if (!map.terminals.length) throw new Error("no terminal " + map.name);
   if (!map.ammoCrates.length) throw new Error("no ammo " + map.name);
+  if (!(map.lootCrates || []).length) throw new Error("no loot " + map.name);
+  if (!(map.healthBooths || []).length) throw new Error("no health booth " + map.name);
   if (!map.exits.length) throw new Error("no exit " + map.name);
   if (!solvable(GM, map)) throw new Error("softlock " + map.name);
   console.log("ok", map.name);

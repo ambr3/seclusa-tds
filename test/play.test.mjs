@@ -296,8 +296,8 @@ test("begin run keeps unlocked guns", () => {
   const game = ShooterGame.create(canvas);
   game.start({});
   const hud = game.hudSnapshot();
-  const ids = hud.guns.map((g) => g.id);
-  assert.deepEqual(ids, ["pistol", "shotgun", "smg"]);
+  assert.deepEqual(hud.guns.map((g) => g.id), ["pistol", "shotgun", "smg", "rifle", "lance"]);
+  assert.deepEqual(hud.guns.filter((g) => g.owned).map((g) => g.id), ["pistol", "shotgun", "smg"]);
   assert.equal(game.setWeapon("smg"), true);
   assert.equal(game.hudSnapshot().weaponId, "smg");
   assert.equal(game.setWeapon("lance"), false);
