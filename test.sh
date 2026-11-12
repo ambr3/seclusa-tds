@@ -7,6 +7,9 @@ echo "→ seclusa lockdown tests @ $PWD"
 
 node --test test/*.mjs
 
+echo "→ deck placement audit"
+node tools/check_decks.mjs
+
 missing=0
 while read -r asset; do
   if [ ! -f "$asset" ]; then

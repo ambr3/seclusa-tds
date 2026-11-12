@@ -164,6 +164,25 @@
         syncSettingsChrome();
       });
     });
+
+    var clearBtn = $("btn-clear-progress");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", function () {
+        var ok = window.confirm(
+          "Clear best score, continue point, and found guns? Theme and settings stay."
+        );
+        if (!ok) return;
+        window.GameSettings.clearProgress();
+        closeSheet();
+        if (game && game.isPlaying() && !game.isOver()) {
+          if (game.suspend) game.suspend();
+          game.stop();
+        }
+        syncMenuProgress();
+        showOverlay("overlay-menu");
+        syncPlayHud();
+      });
+    }
   }
 
 
@@ -388,7 +407,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.54";
+  var BUILD = "0.1.58";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;

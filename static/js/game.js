@@ -30,31 +30,33 @@
 
   var GUN_ORDER = ["pistol", "shotgun", "smg", "rifle", "lance"];
 
+  /* fx: bolt = orange slug · spray = plasma shards · pulse = thin laser
+   * beam = long laser line · lance = heavy plasma spear */
   var WEAPONS = {
     pistol: {
-      id: "pistol", name: "Pistol",
+      id: "pistol", name: "Blaster",
       cooldown: 0.18, speed: 520, radius: 4,
-      cost: 1, damage: 1, pellets: 1, spread: 0
+      cost: 1, damage: 1, pellets: 1, spread: 0, fx: "bolt"
     },
     shotgun: {
-      id: "shotgun", name: "Scatter",
-      cooldown: 0.55, speed: 460, radius: 3.5,
-      cost: 2, damage: 1, pellets: 5, spread: 0.22
+      id: "shotgun", name: "Plasma",
+      cooldown: 0.55, speed: 440, radius: 3.5,
+      cost: 2, damage: 1, pellets: 5, spread: 0.22, fx: "spray"
     },
     smg: {
-      id: "smg", name: "Auto",
-      cooldown: 0.07, speed: 500, radius: 3,
-      cost: 1, damage: 1, pellets: 1, spread: 0.04
+      id: "smg", name: "Pulse",
+      cooldown: 0.07, speed: 560, radius: 2.5,
+      cost: 1, damage: 1, pellets: 1, spread: 0.035, fx: "pulse"
     },
     rifle: {
-      id: "rifle", name: "Rifle",
-      cooldown: 0.11, speed: 640, radius: 3.5,
-      cost: 1, damage: 1, pellets: 1, spread: 0
+      id: "rifle", name: "Beam",
+      cooldown: 0.12, speed: 720, radius: 3,
+      cost: 1, damage: 1, pellets: 1, spread: 0, fx: "beam"
     },
     lance: {
       id: "lance", name: "Lance",
-      cooldown: 0.78, speed: 880, radius: 5,
-      cost: 3, damage: 3, pellets: 1, spread: 0
+      cooldown: 0.78, speed: 900, radius: 5.5,
+      cost: 3, damage: 3, pellets: 1, spread: 0, fx: "lance"
     }
   };
 
@@ -346,6 +348,8 @@
           }
         }
         if (crowded) continue;
+        /* Litter is visual-only but must not draw under wall metal. */
+        if (window.GameMap.circleBlocked(map, cand.x, cand.y, map.tile * 0.7)) continue;
         floorDecor.push({
           kind: cand.kind,
           x: cand.x,
@@ -403,7 +407,8 @@
       if (map && map.lootCrates) {
         for (i = 0; i < map.lootCrates.length; i++) {
           var box = map.lootCrates[i];
-          if (box.taken) continue;
+          /* Sealed décor never blocks doors/gaps — only shootable scrap does. */
+          if (box.taken || !box.shootable) continue;
           if (Math.hypot(x - box.x, y - box.y) < radius + 12) return true;
         }
       }
@@ -1049,9 +1054,11 @@
           y: player.y + Math.sin(ang) * (PLAYER_R + 4),
           vx: Math.cos(ang) * gun.speed,
           vy: Math.sin(ang) * gun.speed,
-          life: 1.15,
+          life: gun.fx === "beam" || gun.fx === "lance" ? 0.95 : 1.15,
           r: gun.radius,
-          dmg: gun.damage
+          dmg: gun.damage,
+          fx: gun.fx || "bolt",
+          spin: (Math.random() - 0.5) * 8
         });
       }
       fireWait = gun.cooldown || 0.2;
@@ -3016,9 +3023,29 @@
       ctx.lineWidth = 1;
     }
 
+    /* Badge sits on the pickup body — not offset into neighbouring walls. */
+    function drawPickupBadge(x, y, text, fill) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.font = "800 8px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      var tw = ctx.measureText(text).width;
+      roundPlate(-tw / 2 - 5, -7, tw + 10, 14, 4);
+      ctx.fillStyle = fill || ORANGE;
+      ctx.fill();
+      ctx.strokeStyle = "#1a120c";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#1a120c";
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+
     function drawAmmoCrate(x, y) {
       if (readyImg(barrelArt)) {
         ctx.drawImage(barrelArt, x - 16, y - 16, 32, 32);
+        drawPickupBadge(x, y, "AMMO", ORANGE);
         return;
       }
       ctx.save();
@@ -3276,13 +3303,145 @@
       ctx.strokeStyle = "#1a120c";
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = "#1a120c";
-      ctx.font = "800 7px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(cache.kind === "patch" ? "HULL" : "AMMO", 0, 1);
-      ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
+      ctx.restore();
+      drawPickupBadge(
+        cache.x,
+        cache.y,
+        cache.kind === "patch" ? "HULL" : "AMMO",
+        cache.kind === "patch" ? TEAL : ORANGE
+      );
+    }
+
+    function drawPlayerShot(b) {
+      var ang = Math.atan2(b.vy, b.vx);
+      var fx = b.fx || "bolt";
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(ang);
+      if (fx === "pulse") {
+        /* Thin red laser needle. */
+        ctx.strokeStyle = "rgba(248,113,113,0.35)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-11, 0);
+        ctx.lineTo(14, 0);
+        ctx.stroke();
+        ctx.strokeStyle = "#fecaca";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-9, 0);
+        ctx.lineTo(16, 0);
+        ctx.stroke();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(-4, 0);
+        ctx.lineTo(12, 0);
+        ctx.stroke();
+      } else if (fx === "beam") {
+        /* Long cyan beam with bright core. */
+        ctx.strokeStyle = "rgba(34,211,238,0.3)";
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(-16, 0);
+        ctx.lineTo(22, 0);
+        ctx.stroke();
+        ctx.strokeStyle = "#67e8f9";
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(-14, 0);
+        ctx.lineTo(24, 0);
+        ctx.stroke();
+        ctx.strokeStyle = "#ecfeff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-8, 0);
+        ctx.lineTo(20, 0);
+        ctx.stroke();
+      } else if (fx === "spray") {
+        /* Hot plasma shard. */
+        ctx.fillStyle = "rgba(168,85,247,0.28)";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, b.r + 5, b.r + 2.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        var plasma = ctx.createLinearGradient(-8, 0, 10, 0);
+        plasma.addColorStop(0, "#c084fc");
+        plasma.addColorStop(0.5, "#f0abfc");
+        plasma.addColorStop(1, "#fae8ff");
+        ctx.fillStyle = plasma;
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(-6, -b.r);
+        ctx.lineTo(-4, 0);
+        ctx.lineTo(-6, b.r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "#1a120c";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else if (fx === "lance") {
+        /* Heavy plasma spear. */
+        ctx.fillStyle = "rgba(249,115,22,0.25)";
+        ctx.beginPath();
+        ctx.ellipse(2, 0, 18, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        var spear = ctx.createLinearGradient(-16, 0, 20, 0);
+        spear.addColorStop(0, "#7c3aed");
+        spear.addColorStop(0.45, "#f97316");
+        spear.addColorStop(1, "#fff7ed");
+        ctx.fillStyle = spear;
+        ctx.beginPath();
+        ctx.moveTo(20, 0);
+        ctx.lineTo(-4, -5.5);
+        ctx.lineTo(-16, -2);
+        ctx.lineTo(-16, 2);
+        ctx.lineTo(-4, 5.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "#1a120c";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        ctx.fillStyle = "#fff7ed";
+        ctx.beginPath();
+        ctx.arc(6, 0, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        /* Blaster bolt — short orange capsule, not a blob. */
+        ctx.fillStyle = "rgba(249,115,22,0.3)";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, b.r + 6, b.r + 1.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        var bolt = ctx.createLinearGradient(-8, 0, 10, 0);
+        bolt.addColorStop(0, "#c2410c");
+        bolt.addColorStop(0.5, "#fb923c");
+        bolt.addColorStop(1, "#fff7ed");
+        ctx.fillStyle = bolt;
+        ctx.beginPath();
+        ctx.ellipse(1, 0, b.r + 5, Math.max(2.2, b.r * 0.55), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#1a120c";
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawEnemyShot(shot) {
+      var ang = Math.atan2(shot.vy, shot.vx);
+      ctx.save();
+      ctx.translate(shot.x, shot.y);
+      ctx.rotate(ang);
+      ctx.fillStyle = "rgba(250,204,21,0.28)";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, shot.r + 5, shot.r + 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = YELLOW;
+      ctx.beginPath();
+      ctx.ellipse(1, 0, shot.r + 3, Math.max(1.8, shot.r * 0.5), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#7a5c12";
+      ctx.lineWidth = 1;
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -3726,33 +3885,11 @@
       }
 
       for (i = 0; i < bullets.length; i++) {
-        var b = bullets[i];
-        ctx.fillStyle = "rgba(249,115,22,0.35)";
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r + 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#fff7ed";
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r * 0.55, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = ORANGE;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-        ctx.fill();
+        drawPlayerShot(bullets[i]);
       }
 
       for (i = 0; i < enemyShots.length; i++) {
-        var shot = enemyShots[i];
-        ctx.beginPath();
-        ctx.arc(shot.x, shot.y, shot.r, 0, Math.PI * 2);
-        ctx.fillStyle = YELLOW;
-        ctx.fill();
-        ctx.strokeStyle = "rgba(250,204,21,0.5)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(shot.x - shot.vx * 0.02, shot.y - shot.vy * 0.02);
-        ctx.lineTo(shot.x, shot.y);
-        ctx.stroke();
+        drawEnemyShot(enemyShots[i]);
       }
 
       castShadow(player.x, player.y, 18, 8);

@@ -12,3 +12,6 @@ Thumbs.db
 # Python bytecode, in case a script is added later
 __pycache__/
 *.py[cod]
+
+# Local deck audit previews (node tools/check_decks.mjs --preview)
+tools/deck-previews/

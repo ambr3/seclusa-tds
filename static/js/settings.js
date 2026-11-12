@@ -189,6 +189,22 @@
       var p = read();
       if (p.suspended) return true;
       return p.unlockedSector > 0 || p.owned.shotgun || p.owned.smg || p.owned.rifle || p.owned.lance || p.cleared;
+    },
+    /* Wipe score / continue / guns. Keeps theme, auto-aim, mute, difficulty. */
+    clearProgress: function () {
+      var cur = read();
+      var next = {
+        autoAim: cur.autoAim,
+        muted: cur.muted,
+        difficulty: cur.difficulty,
+        unlockedSector: 0,
+        owned: blankOwned(),
+        bestScore: 0,
+        cleared: false,
+        suspended: null
+      };
+      if (window.Store && window.Store.setData) window.Store.setData(next);
+      return next;
     }
   };
 })();

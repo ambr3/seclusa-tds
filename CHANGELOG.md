@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.58] - 2026-11-12
+
+- Stronger deck audit: sealed floors, floating doors, orphan pillars, unreachable/wall-stuck enemies. Retired crawler mark F (use E/D). Rebuilt Vent crawl, Med bay, Mess hall so every tile is reachable. Spawns nudge off walls.
+
+## [0.1.57] - 2026-11-12
+
+- Deck audit tool (biome, wall clearance, chokes, solids, ASCII/PPM previews, pickup reach). Floor objects nudge clear of walls. Indoor scrap no longer paints grass. Open sealed med-bay / lift / command pickup rooms.
+
+## [0.1.56] - 2026-11-12
+
+- Sealed scrap never blocks doors/gaps (all decks). Guns fire distinct blaster / plasma / pulse / beam / lance shots instead of orange blobs.
+
+## [0.1.55] - 2026-11-12
+
+- Settings → Clear progress wipes score, continue, and found guns (browser history does not).
+
 ## [0.1.54] - 2026-11-12
 
 - Cleanup: drop unused textures/sheets, docs/ DOS sources, and dead shop code. Single top bar for chrome + HUD. Only some scrap boxes shoot open; no floating world labels that walls clip.

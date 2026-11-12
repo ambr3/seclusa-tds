@@ -4,9 +4,10 @@
  * Story: crash → breach the fortress → push inward → salvage ship parts.
  *
  * # wall  . indoor floor  ~ outdoor floor  P start  X exit  A ammo
- * + health booth  1–4 gun pickups (Scatter/Auto/Rifle/Lance)
+ * + health booth  1–4 gun pickups (Plasma/Pulse/Beam/Lance)
  * S crashed ship  C solid crate  $ loot crate (shoot)  Y armed tower
- * R/G/B keys  r/g/b doors  E grunt  F crawler  H fortress  D drone  O boss
+ * R/G/B keys  r/g/b doors  E grunt  D drone  H fortress  O boss
+ * (F crawler mark retired — do not place)
  */
 
 (function () {
@@ -57,7 +58,7 @@
         "#.........#....$.....#....A....#",
         "#....E....r....E.....g....D....#",
         "#.........#..........#.........#",
-        "#....$....#....G.....#....B....#",
+        "#..$......#....G.....#....B....#",
         "#####.##########.#####.#########",
         "#.........#..........#.........#",
         "#....E....#........E.#....E....#",
@@ -104,7 +105,7 @@
         "#....#....#....#....#..........#",
         "#.E..#....E....g....E....D.....#",
         "#....#.........#...............#",
-        "#.A..#....E....#....F..........#",
+        "#.A..#....E....#....D..........#",
         "#.+..#.........#...............#",
         "#....#....E....#....E..........#",
         "#.2..#.........#..........$....#",
@@ -123,7 +124,7 @@
         "#..#........................#..#",
         "#..r....G..............B....b..#",
         "#..#........................#..#",
-        "#..#..F..............F......#..#",
+        "#..#..D..............D......#..#",
         "#..#............+...........#..#",
         "#..#################g########..#",
         "#......................X.......#",
@@ -141,14 +142,14 @@
         "#.....#.........#.........#.A..#",
         "#..E..r....G....g....B....b.X..#",
         "#.....#.........#.........#....#",
-        "#..$..#....E....#....F....#....#",
+        "#..$..#....E....#....D....#....#",
         "###.###....#....#....#....######",
         "#.....#....#....#....#.........#",
         "#..E..#....E....#....E....D....#",
         "#.....#.........#..............#",
         "#..A..#....E....#....E.........#",
         "#.+...#.........#..............#",
-        "#.....#....F....#....D.........#",
+        "#.....#....D....#....D.........#",
         "#.....#.........#.........$....#",
         "#.....#....E....#....E.........#",
         "################################"
@@ -162,7 +163,7 @@
         "#.............#....E...........#",
         "#......E......r................#",
         "#.............#....G...........#",
-        "#......3......#........F.......#",
+        "#......3......#........D.......#",
         "#######.#######................#",
         "#.............#....E...........#",
         "#......E......g................#",
@@ -170,7 +171,7 @@
         "#......A......#........D.......#",
         "###########b###................#",
         "#.............#....X...........#",
-        "#......F......#....$...........#",
+        "#......D......#....$...........#",
         "#......+......#....E...........#",
         "################################"
       ]
@@ -179,20 +180,20 @@
       name: "Deck 8 — Vent crawl",
       rows: [
         "################################",
-        "#P.R#.###.#.###.#.###.#.###.A..#",
-        "#...#.#...#.#...#.#...#.#......#",
-        "#.E.r.#.E.#.g.E.#.b.E.#.#..X...#",
-        "#...#.#...#.#...#.#...#.#......#",
-        "#.$.#.#.G.#.#.B.#.#.D.#.#......#",
-        "#...###...###...###...###......#",
+        "#P.R...........................#",
+        "#......................E.......#",
+        "#.........##########...........#",
+        "#...E.....#..$....A#...........#",
+        "#.........#........#....E......#",
+        "#.........r...G....g...........#",
+        "#.........#........#...........#",
+        "#.........#..D.....#....D......#",
+        "#.........##########...........#",
+        "#..............B...............#",
         "#..............................#",
-        "#...E.......F.......E..........#",
-        "#..............................#",
-        "#...A.......E.......D..........#",
-        "#..............................#",
-        "#...E.......E.......F..........#",
-        "#...+...................$......#",
-        "#..............................#",
+        "##############b#################",
+        "#..............X...............#",
+        "#....A....+...............E.$..#",
         "################################"
       ]
     },
@@ -200,20 +201,20 @@
       name: "Deck 9 — Med bay",
       rows: [
         "################################",
-        "#P..R..........#####...........#",
-        "#..............#...#....A......#",
-        "#....E.........r...#...........#",
-        "#..............#...#....+......#",
-        "#..............#.G.#...........#",
-        "################...#############",
-        "#..............#.E.#...........#",
-        "#....F.........g...#....D......#",
-        "#..............#.B.#...........#",
-        "################...#############",
-        "#..............#...#...........#",
-        "#....A.........b.X.#....E......#",
-        "#..............#...#....$......#",
-        "#..............#####...........#",
+        "#P.R.....#.........#...........#",
+        "#........#....A....#....+......#",
+        "#...E....r.........#....E......#",
+        "#........#....G....g...........#",
+        "#........#.........#....D......#",
+        "#........#.........#...........#",
+        "#...E....#....B....#....D......#",
+        "#........#.........#...........#",
+        "#...A....#....$....b....X......#",
+        "#........#.........#...........#",
+        "####################...........#",
+        "#..............................#",
+        "#...E......................E...#",
+        "#..............................#",
         "################################"
       ]
     },
@@ -223,18 +224,18 @@
         "################################",
         "#P.R.A.........................#",
         "#..............................#",
-        "#...E..#####..E..#####..F......#",
-        "#......#...#.....#...#.........#",
-        "#......#...#..$..#...#.........#",
-        "########...r.....#...###########",
-        "#..........#..G..#.............#",
-        "#...D......#.....#......F......#",
-        "############..g..###############",
-        "#..........#..B..#.............#",
-        "#...F......#.....#......H......#",
-        "############..b..###############",
-        "#...............X..............#",
-        "#....A....+...............E.$..#",
+        "#...E......#####......E........#",
+        "#..........#...#...............#",
+        "#..........#.$+#......D........#",
+        "#..........##r##...............#",
+        "#............G.................#",
+        "#...E...................H......#",
+        "##############g#################",
+        "#............B.................#",
+        "#...E...................E......#",
+        "##############b#################",
+        "#............X.................#",
+        "#....A....E...............E.$..#",
         "################################"
       ]
     },
@@ -248,10 +249,10 @@
         "#.....#....G.........$.........#",
         "##.####........................#",
         "#.....#....E.........D.........#",
-        "#..F..g........................#",
+        "#..D..g........................#",
         "#.....#....B.........H.........#",
         "##.####........................#",
-        "#.....#....F.........E.........#",
+        "#.....#....D.........E.........#",
         "#..A..b........................#",
         "#.....#....X.........D.........#",
         "#.+...#........................#",
@@ -265,7 +266,7 @@
         "################################",
         "#P.R########################A..#",
         "#...#......................#...#",
-        "#.E.#..E....F....E....D....#...#",
+        "#.E.#..E....D....E....D....#...#",
         "#...r......................b.X.#",
         "#.$+#..........G...........#...#",
         "#...########################...#",
@@ -274,7 +275,7 @@
         "#..........#...#...............#",
         "#...A......#.B.g......D........#",
         "#..........#...#...............#",
-        "#...F......#####......H........#",
+        "#...D......#####......H........#",
         "#..............................#",
         "#...E.................E...$....#",
         "################################"
@@ -294,7 +295,7 @@
         "#......#....D....D....#........#",
         "#......################........#",
         "#..............B...............#",
-        "#...D.....F...........H........#",
+        "#...D.....D...........H........#",
         "###############b################",
         "#..............X...............#",
         "#....A....+...............E.$..#",
@@ -309,10 +310,10 @@
         "#............................E.#",
         "#######.########.########.######",
         "#.....#.#......#.#......#.#....#",
-        "#..E..#.#..$...#.#..D...#.#.F..#",
-        "#.....#r...G...#g...B...b..X...#",
+        "#..E..#.#..$...#.#..D...#.#.D..#",
+        "#.....r....G...#g...B...b..X...#",
         "#..A..#.#......#.#......#......#",
-        "#.....#.#..F...#.#..H...#..E...#",
+        "#.....#.#..D...#.#..H...#..E...#",
         "#.....#.#......#.#......#......#",
         "#######.########.########......#",
         "#............................D.#",
@@ -328,11 +329,11 @@
         "################################",
         "#P.R.A...#..........#..........#",
         "#........#....H.....#....$.A...#",
-        "#...F....r..........g....D.....#",
+        "#...D....r..........g....D.....#",
         "#........#....G.....#....B.....#",
         "#####.##########.#####.#########",
         "#........#..........#..........#",
-        "#...H....#........F.#....H.....#",
+        "#...H....#........D.#....H.....#",
         "#........#..........#..........#",
         "#...A....#..........#####b######",
         "#........#..........#..........#",
@@ -352,13 +353,13 @@
         "#....#####............#####....#",
         "#....#...#....E.......#...#....#",
         "#....#...r............#...#....#",
-        "#....#.+.#......G.....#.A.#....#",
+        "#....#.+.#......G......A..#....#",
         "#....#####............#####....#",
         "#..............E...............#",
         "#....#####............#####....#",
         "#....#...g......B.....#...b....#",
         "#....#.H.#............#.D.#....#",
-        "#....#...#......F.....#.$.#....#",
+        "#....#...#......D.....#.$.#....#",
         "#....#####............#####....#",
         "#..............X...............#",
         "################################"
@@ -374,9 +375,9 @@
         "#.........r........g...........#",
         "#...$.....#....E...#....B......#",
         "#.........#####.#####..........#",
-        "#...F.....................H....#",
+        "#...D.....................H....#",
         "#..............................#",
-        "#...D.....E.....F.....D........#",
+        "#...D.....E.....D.....D........#",
         "###############b################",
         "#...............X..............#",
         "#...A..........................#",
@@ -390,14 +391,14 @@
       rows: [
         "################################",
         "#P##############################",
-        "#.R..E..F..E..D..E..H..E..A....#",
+        "#.R..E..D..E..D..E..H..E..A....#",
         "#..............................#",
         "#######r########################",
         "#......G.......................#",
-        "#..E......F......D......E......#",
+        "#..E......D......D......E......#",
         "#######g########################",
         "#......B.......................#",
-        "#..H......D......F......H......#",
+        "#..H......D......D......H......#",
         "#######b########################",
         "#......X.......................#",
         "#..A......E......$......E......#",
@@ -412,15 +413,15 @@
         "################################",
         "#P.R.A.........................#",
         "#..............................#",
-        "#...F.....H.....D.....F........#",
+        "#...D.....H.....D.....D........#",
         "#..............................#",
         "#............$.................#",
         "########r#######################",
         "#..............G...............#",
-        "#...D.....F...........H........#",
+        "#...D.....D...........H........#",
         "########g#######################",
         "#..............B...............#",
-        "#...H.....D...........F........#",
+        "#...H.....D...........D........#",
         "########b#######################",
         "#..............X...............#",
         "#....E....+...............E.$..#",
@@ -433,12 +434,12 @@
         "################################",
         "#P.R....#..........#....A......#",
         "#.......#....H.....#...........#",
-        "#...F...r..........g....D......#",
+        "#...D...r..........g....D......#",
         "#.......#....G.....#....B......#",
         "#...$...#..........#...........#",
         "####.#########.#########.#######",
         "#.......#..........#...........#",
-        "#...H...#....F.....#....H......#",
+        "#...H...#....D.....#....H......#",
         "#.......#..........#...........#",
         "#...A...#..........#####b#######",
         "#.......#..........#...........#",
@@ -453,11 +454,11 @@
 
 
   function spawnKind(ch) {
-    if (ch === "F") return "drone"; /* old crawler art retired — Dave's drone sheet */
     if (ch === "H") return "fortress";
     if (ch === "D") return "drone";
     if (ch === "O") return "boss";
     if (ch === "E") return "grunt";
+    /* F = retired crawler — ignored if an old ASCII still has one. */
     return null;
   }
 
@@ -477,9 +478,10 @@
   function asciiOutdoor(rows, ax, ay) {
     if (ay < 0 || ax < 0 || ay >= rows.length || ax >= rows[0].length) return false;
     var ch = rows[ay].charAt(ax);
-    if (ch === "~" || ch === "S" || ch === "$" || ch === "Y") return true;
+    /* Only yard marks are outdoor. Scrap ($) / towers (Y) inherit like other props. */
+    if (ch === "~" || ch === "S") return true;
     if (ch === "." || ch === "#") return false;
-    /* Letters (keys, player, enemies) inherit from outdoor neighbours. */
+    /* Letters / props inherit from outdoor neighbours (yard only). */
     var dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
     var i;
     for (i = 0; i < dirs.length; i++) {
@@ -487,7 +489,7 @@
       var ny = ay + dirs[i][1];
       if (ny < 0 || nx < 0 || ny >= rows.length || nx >= rows[0].length) continue;
       var nc = rows[ny].charAt(nx);
-      if (nc === "~" || nc === "S" || nc === "$" || nc === "Y") return true;
+      if (nc === "~" || nc === "S") return true;
     }
     return false;
   }
@@ -662,7 +664,58 @@
     placeCornerTowers(level);
     if (!opts.noWallCache) carveCache(level);
     if (!level.caches.length) dropCache(level);
+    /* Sealed crates on door gaps soft-lock the run — force those shootable. */
+    clearLootChokes(level);
+    /* Nudge every floor object clear of walls so sprites/badges never sit in metal. */
+    clearFloorObjects(level);
     return level;
+  }
+
+  function tileLooksOpen(tile) {
+    return !!(tile && (tile.kind === "floor" || tile.kind === "exit" ||
+      (tile.kind === "door" && tile.open)));
+  }
+
+  /* Floor cell with walls on both sides = a one-tile gap you must walk through. */
+  function isNarrowPassage(map, tx, ty) {
+    if (!tileLooksOpen(tileAt(map, tx, ty))) return false;
+    var wL = isBlocking(tileAt(map, tx - 1, ty));
+    var wR = isBlocking(tileAt(map, tx + 1, ty));
+    var wU = isBlocking(tileAt(map, tx, ty - 1));
+    var wD = isBlocking(tileAt(map, tx, ty + 1));
+    return (wL && wR) || (wU && wD);
+  }
+
+  function clearLootChokes(map) {
+    var crates = map.lootCrates || [];
+    if (!crates.length) return;
+    var T = map.tile;
+    var i;
+    for (i = 0; i < crates.length; i++) {
+      var c = crates[i];
+      if (c.shootable) continue;
+      var tx = (c.x / T) | 0;
+      var ty = (c.y / T) | 0;
+      var dx;
+      var dy;
+      for (dy = -4; dy <= 4; dy++) {
+        for (dx = -4; dx <= 4; dx++) {
+          if (isNarrowPassage(map, tx + dx, ty + dy)) {
+            c.shootable = true;
+            break;
+          }
+        }
+        if (c.shootable) break;
+      }
+      if (c.shootable) continue;
+      for (var di = 0; di < map.doors.length; di++) {
+        var door = map.doors[di];
+        if (Math.hypot(c.x - (door.x + 0.5) * T, c.y - (door.y + 0.5) * T) < T * 4.5) {
+          c.shootable = true;
+          break;
+        }
+      }
+    }
   }
 
   /* Wall colliders are the fine cell itself — already thin. */
@@ -728,10 +781,102 @@
     }
   }
 
+  /* Sprite/collision radius for floor pickups (matches game PICK_R ≈ 14). */
+  var PICKUP_CLEAR_R = TILE * 0.95;
+
+  /* Pull a floor pickup away from neighbouring walls so sprites/badges
+   * do not sit under wall tiles. */
+  function nudgeFromWalls(map, cx, cy, strength) {
+    var T = map.tile;
+    var push = (strength == null ? 0.32 : strength) * T;
+    var tx = (cx / T) | 0;
+    var ty = (cy / T) | 0;
+    var nx = 0;
+    var ny = 0;
+    var ox;
+    var oy;
+    for (oy = -1; oy <= 1; oy++) {
+      for (ox = -1; ox <= 1; ox++) {
+        if (!ox && !oy) continue;
+        if (tileAt(map, tx + ox, ty + oy).kind === "wall") {
+          nx -= ox;
+          ny -= oy;
+        }
+      }
+    }
+    var len = Math.hypot(nx, ny);
+    if (!len) return { x: cx, y: cy };
+    return {
+      x: cx + (nx / len) * push,
+      y: cy + (ny / len) * push
+    };
+  }
+
+  /* Keep moving / spiral-search until the circle clears walls (and closed doors). */
+  function ensureClear(map, cx, cy, r) {
+    var rad = r == null ? PICKUP_CLEAR_R : r;
+    if (!circleBlocked(map, cx, cy, rad)) return { x: cx, y: cy };
+    var x = cx;
+    var y = cy;
+    var step;
+    for (step = 0; step < 16; step++) {
+      var nudged = nudgeFromWalls(map, x, y, 0.28 + step * 0.06);
+      x = nudged.x;
+      y = nudged.y;
+      if (!circleBlocked(map, x, y, rad)) return { x: x, y: y };
+    }
+    var T = map.tile;
+    var ox = (cx / T) | 0;
+    var oy = (cy / T) | 0;
+    var ring;
+    for (ring = 0; ring <= 10; ring++) {
+      var dy;
+      for (dy = -ring; dy <= ring; dy++) {
+        var dx;
+        for (dx = -ring; dx <= ring; dx++) {
+          if (ring > 0 && Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          var tx = ox + dx;
+          var ty = oy + dy;
+          var tile = tileAt(map, tx, ty);
+          if (tile.kind !== "floor" && tile.kind !== "exit") continue;
+          var px = (tx + 0.5) * T;
+          var py = (ty + 0.5) * T;
+          var p = nudgeFromWalls(map, px, py, 0.4);
+          if (!circleBlocked(map, p.x, p.y, rad)) return p;
+          if (!circleBlocked(map, px, py, rad)) return { x: px, y: py };
+        }
+      }
+    }
+    return { x: cx, y: cy };
+  }
+
+  function relocateList(map, list, r) {
+    if (!list || !list.length) return;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var p = ensureClear(map, list[i].x, list[i].y, r);
+      list[i].x = p.x;
+      list[i].y = p.y;
+    }
+  }
+
+  /* Ammo / loot / guns / booths / keys / caches / crates / spawns — off the walls. */
+  function clearFloorObjects(map) {
+    var r = PICKUP_CLEAR_R;
+    relocateList(map, map.ammoCrates, r);
+    relocateList(map, map.lootCrates, r);
+    relocateList(map, map.healthBooths, r);
+    relocateList(map, map.gunPickups, r);
+    relocateList(map, map.keys, r);
+    relocateList(map, map.caches, r);
+    relocateList(map, map.crates, r);
+    relocateList(map, map.spawns, r * 0.85);
+  }
+
   function dropCache(map) {
     var exits = map.exits;
     var best = null;
-    var bestWalls = -1;
+    var bestScore = -1;
     var y;
     for (y = 1; y < map.rows - 1; y++) {
       var x;
@@ -752,17 +897,24 @@
         if (map.tiles[y + 1][x].kind === "wall") walls++;
         if (map.tiles[y][x - 1].kind === "wall") walls++;
         if (map.tiles[y][x + 1].kind === "wall") walls++;
-        if (walls > bestWalls) {
-          bestWalls = walls;
+        /* Prefer a side alcove (1–2 walls), not a dead pocket jammed in a corner. */
+        var score;
+        if (walls >= 1 && walls <= 2) score = 100 + walls * 10;
+        else if (walls >= 1) score = walls;
+        else continue;
+        score += (x + y) * 0.01;
+        if (score > bestScore) {
+          bestScore = score;
           best = { x: x, y: y, cx: cx, cy: cy };
         }
       }
     }
     if (!best) return;
     map.tiles[best.y][best.x].cache = true;
+    var pos = nudgeFromWalls(map, best.cx, best.cy);
     map.caches.push({
-      x: best.cx,
-      y: best.cy,
+      x: pos.x,
+      y: pos.y,
       kind: (map.index % 2 === 0) ? "ammo" : "patch",
       taken: false
     });
@@ -818,9 +970,15 @@
         map.tiles[y][x] = { kind: "floor", outdoor: false, cache: true };
         map.tiles[y1][x1] = { kind: "floor", outdoor: false, cache: true };
         map.tiles[y2][x2] = { kind: "floor", outdoor: false, cache: true };
+        /* Sit at the pocket mouth (toward the corridor), not deep in the wall. */
+        var mouth = nudgeFromWalls(
+          map,
+          (x + 0.5) * map.tile + floors[0][0] * map.tile * 0.4,
+          (y + 0.5) * map.tile + floors[0][1] * map.tile * 0.4
+        );
         map.caches.push({
-          x: (x2 + 0.5) * map.tile,
-          y: (y2 + 0.5) * map.tile,
+          x: mouth.x,
+          y: mouth.y,
           kind: (map.index % 2 === 0) ? "ammo" : "patch",
           taken: false
         });
@@ -934,6 +1092,7 @@
     TILE: TILE,
     MACRO: MACRO,
     WALL_THICK: WALL_THICK,
+    PICKUP_CLEAR_R: PICKUP_CLEAR_R,
     KEY_COLOURS: KEY_COLOURS,
     sectorCount: sectorCount,
     cloneSector: cloneSector,
@@ -943,8 +1102,20 @@
     wallRectsForTile: wallRectsForTile,
     isCornerTowerCell: isCornerTowerCell,
     circleBlocked: circleBlocked,
+    ensureClear: ensureClear,
+    clearFloorObjects: clearFloorObjects,
     tryOpenDoor: tryOpenDoor,
     allDoorsOpen: allDoorsOpen,
-    floorCells: floorCells
+    floorCells: floorCells,
+    /* Raw ASCII rows for biome / preview tooling. */
+    sectorRows: function (index) {
+      var i = Math.max(0, Math.min(SECTORS.length - 1, index | 0));
+      return SECTORS[i].rows.slice();
+    },
+    sectorMeta: function (index) {
+      var i = Math.max(0, Math.min(SECTORS.length - 1, index | 0));
+      var s = SECTORS[i];
+      return { name: s.name, noWallCache: !!s.noWallCache };
+    }
   };
 })();

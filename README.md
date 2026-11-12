@@ -11,10 +11,10 @@ Offline PWA. Data stays on the device; nothing is sent anywhere.
 
 ## What it does
 
-- Version 0.1.54
+- Version 0.1.58
 - Twenty fortress decks, from the crash site to the salvage bay
 - Keycards, doors, labelled ammo / health / guns, shootable LOOT boxes, side caches, and off-path health booths
-- Pistol, scatter, auto, rifle, and lance, plus dash, breach, and a hull patch
+- Blaster, plasma spray, pulse laser, beam, and plasma lance, plus dash, breach, and a hull patch
 - Progress (unlocks, guns, best score) saved locally
 
 ## Run
