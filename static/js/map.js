@@ -759,11 +759,27 @@
     return true;
   }
 
+  /* Whole MACRO pad is the gun mount — shots/LOS may pass it (360° fire). */
+  function markTowerMacro(map, tx, ty) {
+    var ax = Math.floor(tx / MACRO) * MACRO;
+    var ay = Math.floor(ty / MACRO) * MACRO;
+    var ey;
+    for (ey = 0; ey < MACRO; ey++) {
+      var ex;
+      for (ex = 0; ex < MACRO; ex++) {
+        var tile = tileAt(map, ax + ex, ay + ey);
+        if (tile && tile.kind === "wall") tile.tower = true;
+      }
+    }
+  }
+
   function placeCornerTowers(map) {
     var seen = {};
     var i;
     for (i = 0; i < map.towers.length; i++) {
-      seen[Math.round(map.towers[i].x) + "," + Math.round(map.towers[i].y)] = 1;
+      var existing = map.towers[i];
+      seen[Math.round(existing.x) + "," + Math.round(existing.y)] = 1;
+      markTowerMacro(map, Math.floor(existing.x / map.tile), Math.floor(existing.y / map.tile));
     }
     var y;
     for (y = 0; y < map.rows; y++) {
@@ -776,7 +792,7 @@
         if (seen[key]) continue;
         seen[key] = 1;
         map.towers.push({ x: cx, y: cy, corner: true });
-        map.tiles[y][x].tower = true;
+        markTowerMacro(map, x, y);
       }
     }
   }

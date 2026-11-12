@@ -199,10 +199,7 @@
     var toastLife = 0;
     var flash = 0;
     var flashColour = null;
-    var shake = 0;
     var hitMarks = [];
-    var doorGlow = 0;
-    var doorGlowColour = ORANGE;
     var victoryT = 0;
     var mods = window.GameSettings.difficultyMods("normal");
     var continueMode = false;
@@ -579,8 +576,6 @@
       toastLife = 0;
       flash = 0;
       flashColour = null;
-      shake = 0;
-      doorGlow = 0;
       victoryT = 0;
       hitMarks.length = 0;
 
@@ -737,7 +732,6 @@
         /* Partial hit on easy/medium — flinch, no heart lost yet. */
         iframes = IFRAMES * 0.45 * iframeMul;
         flash = 0.12;
-        shake = 0.12;
         sfx("thud");
         return;
       }
@@ -748,7 +742,6 @@
         hurtBank = 0;
         iframes = 1.2 * iframeMul;
         flash = 0.3;
-        shake = 0.35;
         showToast("Hull patch caught it");
         sfx("hurt");
         return;
@@ -756,7 +749,6 @@
       hp -= dmg;
       iframes = IFRAMES * iframeMul;
       flash = 0.25;
-      shake = 0.3;
       sfx("hurt");
       sfx("thud");
       if (hp <= 0) {
@@ -787,7 +779,7 @@
       return { x: nx / nlen, y: ny / nlen };
     }
 
-    function clearLine(x0, y0, x1, y1) {
+    function clearLine(x0, y0, x1, y1, ignoreTowerWalls) {
       var dist = Math.hypot(x1 - x0, y1 - y0);
       var steps = Math.max(1, Math.ceil(dist / (map.tile * 0.45)));
       var i;
@@ -795,7 +787,7 @@
         var t = i / steps;
         var x = x0 + (x1 - x0) * t;
         var y = y0 + (y1 - y0) * t;
-        if (window.GameMap.circleBlocked(map, x, y, 3)) return false;
+        if (window.GameMap.circleBlocked(map, x, y, 3, ignoreTowerWalls)) return false;
       }
       return true;
     }
@@ -863,12 +855,14 @@
         e.fireCool -= dt;
         var foot = towerFoot(e);
         var ang = Math.atan2(player.y - foot.y, player.x - foot.x);
-        var mx = foot.x + Math.cos(ang) * (foot.half + 12);
-        var my = foot.y + Math.sin(ang) * (foot.half + 12);
+        /* Muzzle outside the mount pad; LOS/shots ignore the tower wall MACRO. */
+        var muzzle = foot.half + map.tile * 0.85;
+        var mx = foot.x + Math.cos(ang) * muzzle;
+        var my = foot.y + Math.sin(ang) * muzzle;
         var mdx = player.x - mx;
         var mdy = player.y - my;
         var mlen = Math.hypot(mdx, mdy) || 1;
-        var towerSee = mlen < 420 && mlen > 28 && clearLine(mx, my, player.x, player.y);
+        var towerSee = mlen < 420 && mlen > 28 && clearLine(mx, my, player.x, player.y, true);
         markAware(e, towerSee);
         if (e.fireCool <= 0 && towerSee) {
           e.fireCool = enemyFireGap(1.45);
@@ -879,7 +873,8 @@
             vy: (mdy / mlen) * 240,
             life: 1.5,
             r: 4,
-            dmg: 1
+            dmg: 1,
+            fromTower: true
           });
         }
         return;
@@ -1002,7 +997,9 @@
         cachesTaken: (map.caches || []).map(function (c) { return !!c.taken; }),
         breached: breached.map(function (c) { return { x: c.x, y: c.y }; }),
         breachCharges: breachCharges,
-        patchRun: patchRun
+        patchRun: patchRun,
+        patchHold: patchHold,
+        victoryT: victoryT
       };
     }
 
@@ -1067,7 +1064,8 @@
       inventory = { R: !!snap.inventory.R, G: !!snap.inventory.G, B: !!snap.inventory.B };
       breachCharges = snap.breachCharges ? 1 : 0;
       patchRun = !!snap.patchRun;
-      patchHold = 0;
+      patchHold = Math.max(0, snap.patchHold || 0);
+      victoryT = Math.max(0, snap.victoryT || 0);
       dashLeft = 0;
       dashCool = 0;
       sectorIndex = snap.patchRun ? 0 : snap.sectorIndex;
@@ -1094,11 +1092,21 @@
       }
       spawnWait = 1.2;
       updateCamera();
-      showToast(patchRun ? "Hold E at the wreck" : map.name);
+      if (victoryT > 0) {
+        showToast("SALVAGE COMPLETE");
+      } else {
+        showToast(patchRun ? "Hold E at the wreck" : map.name);
+      }
     }
 
     function suspend() {
       if (!playing || over || !map) return;
+      /* Mid-victory suspend → finish the win instead of stranding patch mode. */
+      if (victoryT > 0) {
+        victoryT = 0;
+        endRun(true);
+        return;
+      }
       var snap = snapshotRun();
       playing = false;
       paused = false;
@@ -1124,10 +1132,6 @@
       else if (fxName === "beam") sfx("shootBeam");
       else if (fxName === "lance") sfx("shootLance");
       else sfx("shootBolt");
-      if (fxName === "lance") shake = Math.max(shake, 0.22);
-      else if (fxName === "spray") shake = Math.max(shake, 0.16);
-      else if (fxName === "beam") shake = Math.max(shake, 0.1);
-      else shake = Math.max(shake, 0.07);
       var base = player.facing;
       var p;
       for (p = 0; p < gun.pellets; p++) {
@@ -1264,30 +1268,31 @@
       if (!playing || over) return;
       lastInput = input;
 
-      if (input.pause) {
-        setPaused(!paused);
-      }
-
-      if (paused) {
-        if (toastLife > 0) toastLife -= dt;
-        return;
-      }
-
       if (dt > 0.05) dt = 0.05;
       if (toastLife > 0) toastLife -= dt;
       if (flash > 0) flash -= dt;
       else flashColour = null;
-      if (shake > 0) shake -= dt;
-      if (doorGlow > 0) doorGlow -= dt;
 
-      /* Victory beat — freeze combat, then hand off to the over screen. */
+      /* Victory beat runs even if paused, so the run always finishes. */
       if (victoryT > 0) {
+        if (paused) {
+          paused = false;
+          if (typeof onPause === "function") onPause(false);
+        }
         victoryT -= dt;
         if (victoryT <= 0) {
           victoryT = 0;
           endRun(true);
         }
         updateCamera(dt);
+        return;
+      }
+
+      if (input.pause) {
+        setPaused(!paused);
+      }
+
+      if (paused) {
         return;
       }
 
@@ -1332,11 +1337,6 @@
         showToast(opened === "R" ? "Red door unlocked" :
           opened === "G" ? "Green door unlocked" : "Blue door unlocked");
         sfx("door");
-        doorGlow = 0.85;
-        doorGlowColour = opened === "R" ? "#e11d48" : opened === "G" ? "#16a34a" : "#2563eb";
-        flash = Math.max(flash, 0.28);
-        flashColour = doorGlowColour;
-        shake = Math.max(shake, 0.18);
       }
 
       var ki;
@@ -1489,7 +1489,7 @@
         es.life -= dt;
         if (
           es.life <= 0 ||
-          window.GameMap.circleBlocked(map, es.x, es.y, es.r) ||
+          window.GameMap.circleBlocked(map, es.x, es.y, es.r, !!es.fromTower) ||
           propBlocked(es.x, es.y, es.r)
         ) {
           enemyShots.splice(i, 1);
@@ -1516,25 +1516,6 @@
           }
         }
 
-        var hit = false;
-        for (var j = bullets.length - 1; j >= 0; j--) {
-          var bullet = bullets[j];
-          if (circlesHit(e.x, e.y, e.r, bullet.x, bullet.y, bullet.r)) {
-            e.hp -= bullet.dmg;
-            bullets.splice(j, 1);
-            hitMarks.push({ x: e.x, y: e.y, life: 0.25 });
-            sfx("hit");
-            shake = Math.max(shake, 0.11 + bullet.dmg * 0.04);
-            if (e.hp <= 0) hit = true;
-            break;
-          }
-        }
-        if (hit) {
-          score += e.score + sectorIndex;
-          enemies.splice(i, 1);
-          continue;
-        }
-
         if (
           e.kind !== "drone" &&
           e.kind !== "tower" &&
@@ -1558,7 +1539,6 @@
             victoryT = 2.4;
             flash = 0.55;
             flashColour = "#fbbf24";
-            shake = 0.35;
             showToast("SALVAGE COMPLETE");
             sfx("win");
           }
@@ -1595,21 +1575,39 @@
       ctx.globalAlpha = 1;
     }
 
+    function touchPads() {
+      if (lastInput && lastInput.pads) return lastInput.pads;
+      if (window.GameInput && window.GameInput.padLayout) {
+        return window.GameInput.padLayout(w, h);
+      }
+      var fireR = Math.max(52, Math.min(72, Math.min(w, h) * 0.11));
+      var smallR = fireR * 0.72;
+      var fire = { cx: w - fireR - 18, cy: h - fireR - 18, r: fireR };
+      return {
+        fire: fire,
+        use: { cx: fire.cx - fireR - smallR - 10, cy: fire.cy + 4, r: smallR },
+        dash: { cx: fire.cx, cy: fire.cy - fireR - smallR - 8, r: smallR * 0.92 }
+      };
+    }
+
     function drawIdleStick(colour) {
+      var pads = touchPads();
+      var cx = Math.min(80, pads.fire.cx * 0.35);
+      var cy = h - 80;
+      var rad = lastInput && lastInput.stickRadius ? lastInput.stickRadius * 0.72 : 56;
       ctx.globalAlpha = 0.22;
       ctx.strokeStyle = colour;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(80, h - 80, 56, 0, Math.PI * 2);
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
 
-    function drawFirePad(active, colour) {
-      var cx = w - 80;
-      var cy = h - 80;
+    function drawActionPad(pad, label, active, colour) {
+      if (!pad) return;
       ctx.beginPath();
-      ctx.arc(cx, cy, 48, 0, Math.PI * 2);
+      ctx.arc(pad.cx, pad.cy, pad.r, 0, Math.PI * 2);
       ctx.fillStyle = colour;
       ctx.globalAlpha = active ? 0.45 : 0.18;
       ctx.fill();
@@ -1619,13 +1617,20 @@
       ctx.stroke();
       ctx.globalAlpha = active ? 0.95 : 0.55;
       ctx.fillStyle = colour;
-      ctx.font = "700 13px system-ui, sans-serif";
+      ctx.font = "700 " + Math.max(11, Math.min(14, pad.r * 0.28)) + "px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("FIRE", cx, cy);
+      ctx.fillText(label, pad.cx, pad.cy);
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
       ctx.globalAlpha = 1;
+    }
+
+    function drawTouchActionPads() {
+      var pads = touchPads();
+      drawActionPad(pads.fire, "FIRE", !!(lastInput && lastInput.firePadActive), ORANGE);
+      drawActionPad(pads.use, "USE", !!(lastInput && lastInput.usePadActive), "#38bdf8");
+      drawActionPad(pads.dash, "DASH", !!(lastInput && lastInput.dashPadActive), "#a3e635");
     }
 
     function drawHpBar(e) {
@@ -2136,7 +2141,6 @@
     var joinLCracked = null;
     var joinT = null;
     var joinX = null;
-    var towerArt = null;
     var floorArt = null;
     var floorsByKey = { concrete: null, plate: null, plate2: null, plate3: null };
     var grassArt = null;
@@ -2145,7 +2149,6 @@
     var junkDrain = null;
     var propArts = Object.create(null);
     var shipArt = null;
-    var robotArt = null;
     var robotFrames = [];
     var pilotArt = null;
     var pilotFrames = [];
@@ -2203,7 +2206,6 @@
       loadImg("join-cracked.png", function (img) { joinLCracked = img; });
       loadImg("join-t.png", function (img) { joinT = img; });
       loadImg("join-x.png", function (img) { joinX = img; });
-      loadImg("guard-body.png", function (img) { towerArt = img; });
       loadImg("floor-concrete.jpg", function (img) {
         floorsByKey.concrete = img;
         if (!floorArt) floorArt = img;
@@ -2218,7 +2220,7 @@
       loadImg("junk-drain.png", function (img) { junkDrain = img; });
       [
         "bricks", "broken", "bucket", "cans", "cracks", "crates",
-        "foot", "hose", "lights", "tools", "tyre", "wood", "tin", "sandbag"
+        "hose", "lights", "tools", "tyre", "wood", "tin", "sandbag"
       ].forEach(function (name) {
         loadImg("prop-" + name + ".png", function (img) { propArts[name] = img; });
       });
@@ -2226,7 +2228,6 @@
       loadImg("crate.png", function (img) { crateArt = img; });
       loadImg("barrel.png", function (img) { barrelArt = img; });
       loadImg("ship-crashed.png", function (img) { shipArt = img; });
-      loadImg("enemy-robot1.png", function (img) { robotArt = img; });
       loadImg("pilot-dir-2.png", function (img) {
         pilotArt = img;
         if (!pilotFrames[2]) pilotFrames[2] = img;
@@ -2703,8 +2704,8 @@
         }
       } else if (propArts[d.kind] && readyImg(propArts[d.kind])) {
         var prop = propArts[d.kind];
-        var pw = d.kind === "lights" || d.kind === "foot" ? 36 : 42;
-        var ph = d.kind === "lights" ? 28 : d.kind === "foot" ? 48 : 40;
+        var pw = d.kind === "lights" ? 36 : 42;
+        var ph = d.kind === "lights" ? 28 : 40;
         ctx.drawImage(prop, -pw * 0.5, -ph * 0.5, pw, ph);
       } else if (d.kind === "scrap") {
         ctx.fillStyle = "rgba(0,0,0,0.2)";
@@ -3387,8 +3388,8 @@
     }
 
     function drawTower(e) {
-      /* Cannon on the corner wall only — skip the huge guard-body room art. */
-      if (map && (readyImg(cannonFrames[0]) || readyImg(towerArt))) {
+      /* Cannon on the corner wall only. */
+      if (map && readyImg(cannonFrames[0])) {
         var foot = towerFoot(e);
         var pad = foot.half * 0.85;
         ctx.fillStyle = "rgba(0,0,0,0.35)";
@@ -3932,8 +3933,8 @@
       var dim = readColour("--text-dim", "#8a8a8a");
       var danger = readColour("--danger", "#f2857c");
       var colours = window.GameMap.KEY_COLOURS;
-      var sx = shake > 0 ? (Math.random() - 0.5) * 6 : 0;
-      var sy = shake > 0 ? (Math.random() - 0.5) * 6 : 0;
+      var sx = 0;
+      var sy = 0;
 
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = "#1a140e";
@@ -4087,12 +4088,6 @@
           ctx.fillRect(0, 0, w, h);
         }
       }
-      if (doorGlow > 0) {
-        ctx.fillStyle = doorGlowColour;
-        ctx.globalAlpha = Math.min(0.22, doorGlow * 0.28);
-        ctx.fillRect(0, 0, w, h);
-        ctx.globalAlpha = 1;
-      }
       if (victoryT > 0) {
         ctx.fillStyle = "rgba(15, 12, 8, " + (0.25 + (1 - Math.min(1, victoryT / 2.4)) * 0.35) + ")";
         ctx.fillRect(0, 0, w, h);
@@ -4158,20 +4153,14 @@
           if (lastInput.autoAim) {
             drawStick(lastInput.moveStick, lastInput.stickRadius, text);
             if (!lastInput.moveStick.active) drawIdleStick(dim);
-            drawFirePad(!!lastInput.firePadActive, ORANGE);
+            drawTouchActionPads();
           } else {
             drawStick(lastInput.moveStick, lastInput.stickRadius, text);
             drawStick(lastInput.aimStick, lastInput.stickRadius, ORANGE);
             if (!lastInput.moveStick.active && !lastInput.aimStick.active) {
               drawIdleStick(dim);
-              ctx.globalAlpha = 0.22;
-              ctx.strokeStyle = ORANGE;
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.arc(w - 80, h - 80, 56, 0, Math.PI * 2);
-              ctx.stroke();
-              ctx.globalAlpha = 1;
             }
+            drawTouchActionPads();
           }
         }
       }

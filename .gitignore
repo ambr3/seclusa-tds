@@ -13,5 +13,6 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 
-# Local deck audit previews (node tools/check_decks.mjs --preview)
+# Local deck audit / review previews (not shipped)
 tools/deck-previews/
+level images/

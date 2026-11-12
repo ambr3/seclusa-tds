@@ -82,7 +82,12 @@
       cachesTaken: boolList(raw.cachesTaken, 4),
       breached: breached,
       breachCharges: raw.breachCharges ? 1 : 0,
-      patchRun: !!raw.patchRun
+      patchRun: !!raw.patchRun,
+      patchHold: num(raw.patchHold, 0, 4, 0),
+      victoryT: num(raw.victoryT, 0, 4, 0),
+      lootTaken: boolList(raw.lootTaken || raw.creditsTaken, 16),
+      boothsUsed: boolList(raw.boothsUsed, 8),
+      gunsTaken: boolList(raw.gunsTaken, 8)
     };
   }
 

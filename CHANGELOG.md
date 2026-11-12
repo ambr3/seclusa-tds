@@ -1,8 +1,12 @@
 # Changelog
 
+## [0.1.60] - 2026-11-12
+
+- Touch pads share one layout (FIRE/USE/DASH draw + hit). Audio unlocks on first gesture. Towers fire through their mount wall. Drop door flash, screen shake, unused textures, and committed level-image dumps. Victory survives pause/suspend; run snapshot keeps victory/loot state.
+
 ## [0.1.59] - 2026-11-12
 
-- Polish pass: deck-identity litter (beds/ducts/mess props), crash-site skids, per-weapon shot feel + SFX, door unlock flash, enemy alert pips, salvage victory beat, richer level-image markers.
+- Polish pass: deck-identity litter (beds/ducts/mess props), crash-site skids, per-weapon shot feel + SFX, enemy alert pips, salvage victory beat, richer level-image markers.
 
 ## [0.1.58] - 2026-11-12
 

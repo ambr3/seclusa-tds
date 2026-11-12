@@ -53,8 +53,13 @@
     return on;
   }
 
+  function unlockAudio() {
+    if (window.GameAudio && window.GameAudio.unlock) window.GameAudio.unlock();
+  }
+
   function applyMuted(value) {
     var on = window.GameSettings.setMuted(value);
+    if (!on) unlockAudio();
     syncSettingsChrome();
     return on;
   }
@@ -375,6 +380,7 @@
     closeSheet();
     hideOverlays();
     fitCanvas();
+    unlockAudio();
     game.start(opts || {});
     startLoop();
   }
@@ -407,7 +413,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.59";
+  var BUILD = "0.1.60";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;
@@ -468,6 +474,9 @@
     syncControlsBlurb();
     syncMenuProgress();
     showOverlay("overlay-menu");
+    /* First gesture unlocks Web Audio (browsers start the context suspended). */
+    document.addEventListener("pointerdown", unlockAudio, true);
+    document.addEventListener("keydown", unlockAudio, true);
     registerSw();
   }
 

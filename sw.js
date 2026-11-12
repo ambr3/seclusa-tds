@@ -24,7 +24,7 @@
  *     they hard-reload: new hashes, old bytes.
  */
 
-const VERSION = "0.1.59";
+const VERSION = "0.1.60";
 const CACHE_PREFIX = "seclusa-lockdown-";
 const CACHE = `${CACHE_PREFIX}v${VERSION}`;
 
@@ -65,13 +65,11 @@ const PRECACHE = [  "./",
   "./static/textures/drone-5.png",
   "./static/textures/drone-6.png",
   "./static/textures/drone-7.png",
-  "./static/textures/enemy-robot1.png",
   "./static/textures/floor-concrete.jpg",
   "./static/textures/floor-plate.jpg",
   "./static/textures/floor-plate2.jpg",
   "./static/textures/floor-plate3.jpg",
   "./static/textures/grass.jpg",
-  "./static/textures/guard-body.png",
   "./static/textures/in-0.png",
   "./static/textures/in-1.png",
   "./static/textures/in-2.png",
@@ -109,7 +107,6 @@ const PRECACHE = [  "./",
   "./static/textures/prop-cans.png",
   "./static/textures/prop-cracks.png",
   "./static/textures/prop-crates.png",
-  "./static/textures/prop-foot.png",
   "./static/textures/prop-hose.png",
   "./static/textures/prop-lights.png",
   "./static/textures/prop-sandbag.png",

@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { loadGameMap, ppmPreview, asciiPreview } from "./deck_audit.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
+/* Review-only output — gitignored; regenerate when needed. */
 const outDir = join(here, "..", "level images");
 const SCALE = 10; /* pixels per fine tile — readable for review */
 
