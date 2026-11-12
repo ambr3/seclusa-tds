@@ -465,6 +465,7 @@ export function ppmPreview(GameMap, index) {
   const map = GameMap.cloneSector(index);
   const w = map.cols;
   const h = map.rows;
+  const macro = GameMap.MACRO || 3;
   const rgb = [];
   function put(r, g, b) {
     rgb.push(r, g, b);
@@ -472,14 +473,21 @@ export function ppmPreview(GameMap, index) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const t = map.tiles[y][x];
-      if (t.kind === "wall") put(70, 78, 96);
-      else if (t.kind === "door") put(180, 90, 40);
-      else if (t.kind === "exit") put(240, 140, 40);
-      else if (t.outdoor) put(48, 140, 52);
-      else put(128, 128, 132);
+      let r, g, b;
+      if (t.kind === "wall") { r = 70; g = 78; b = 96; }
+      else if (t.kind === "door") { r = 180; g = 90; b = 40; }
+      else if (t.kind === "exit") { r = 240; g = 140; b = 40; }
+      else if (t.outdoor) { r = 48; g = 140; b = 52; }
+      else { r = 128; g = 128; b = 132; }
+      /* Faint MACRO grid for review. */
+      if (x % macro === 0 || y % macro === 0) {
+        r = Math.max(0, r - 14);
+        g = Math.max(0, g - 14);
+        b = Math.max(0, b - 12);
+      }
+      put(r, g, b);
     }
   }
-  /* Stamp pickups */
   function stamp(list, r, g, b) {
     if (!list) return;
     for (const p of list) {
@@ -492,13 +500,30 @@ export function ppmPreview(GameMap, index) {
       rgb[i + 2] = b;
     }
   }
+  function stampAt(x, y, r, g, b) {
+    const tx = Math.floor(x / map.tile);
+    const ty = Math.floor(y / map.tile);
+    if (ty < 0 || tx < 0 || ty >= h || tx >= w) return;
+    const i = (ty * w + tx) * 3;
+    rgb[i] = r;
+    rgb[i + 1] = g;
+    rgb[i + 2] = b;
+  }
   stamp(map.lootCrates, 220, 190, 40);
   stamp(map.ammoCrates, 240, 120, 40);
   stamp(map.caches, 220, 60, 60);
   stamp(map.healthBooths, 80, 200, 220);
   stamp(map.gunPickups, 160, 80, 220);
-  stamp(map.keys, 240, 240, 80);
   stamp(map.crates, 120, 80, 40);
+  /* Keys by colour, start, exits — review markers. */
+  for (const k of map.keys || []) {
+    if (k.colour === "R") stampAt(k.x, k.y, 240, 48, 72);
+    else if (k.colour === "G") stampAt(k.x, k.y, 40, 200, 90);
+    else stampAt(k.x, k.y, 50, 120, 240);
+  }
+  stampAt(map.start.x, map.start.y, 80, 240, 255);
+  for (const ex of map.exits || []) stampAt(ex.x, ex.y, 255, 170, 40);
+  for (const s of map.spawns || []) stampAt(s.x, s.y, 200, 60, 200);
 
   let body = "P6\n" + w + " " + h + "\n255\n";
   return { header: body, pixels: Buffer.from(rgb), width: w, height: h };

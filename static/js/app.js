@@ -382,10 +382,10 @@
   function endGame(score, won) {
     var title = $("over-title");
     var label = $("over-score");
-    if (title) title.textContent = won ? "Parts recovered" : "Downed";
+    if (title) title.textContent = won ? "Salvage complete" : "Downed";
     if (label) {
       label.textContent = won
-        ? ("Score: " + score + " — enough scrap to patch the ship.")
+        ? ("Score: " + score + " — hull patched, fortress behind you.")
         : ("Score: " + score);
     }
     syncMenuProgress();
@@ -407,7 +407,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.58";
+  var BUILD = "0.1.59";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;

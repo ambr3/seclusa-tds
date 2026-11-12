@@ -11,7 +11,7 @@ import { loadGameMap, ppmPreview, asciiPreview } from "./deck_audit.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "..", "level images");
-const SCALE = 8; /* pixels per fine tile */
+const SCALE = 10; /* pixels per fine tile — readable for review */
 
 const GameMap = loadGameMap();
 mkdirSync(outDir, { recursive: true });
@@ -72,7 +72,7 @@ for (let i = 0; i < n; i++) {
       "-pointsize", "11",
       "-fill", "#a0a0a8",
       "-annotate", "+12+10",
-      "wall  door  exit  grass  floor  |  loot  ammo  cache  booth  gun  key  crate",
+      "cyan=start  R/G/B keys  orange=exit  purple=spawn  | wall door grass floor loot",
       pngPath
     ],
     { encoding: "utf8" }

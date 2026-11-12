@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.59] - 2026-11-12
+
+- Polish pass: deck-identity litter (beds/ducts/mess props), crash-site skids, per-weapon shot feel + SFX, door unlock flash, enemy alert pips, salvage victory beat, richer level-image markers.
+
 ## [0.1.58] - 2026-11-12
 
 - Stronger deck audit: sealed floors, floating doors, orphan pillars, unreachable/wall-stuck enemies. Retired crawler mark F (use E/D). Rebuilt Vent crawl, Med bay, Mess hall so every tile is reachable. Spawns nudge off walls.

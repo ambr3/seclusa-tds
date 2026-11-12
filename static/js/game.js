@@ -198,8 +198,12 @@
     var toastMsg = "";
     var toastLife = 0;
     var flash = 0;
+    var flashColour = null;
     var shake = 0;
     var hitMarks = [];
+    var doorGlow = 0;
+    var doorGlowColour = ORANGE;
+    var victoryT = 0;
     var mods = window.GameSettings.difficultyMods("normal");
     var continueMode = false;
 
@@ -239,7 +243,9 @@
         spawnCool: k === "boss" ? 2.5 : 0,
         fireCool: (k === "drone" || k === "grunt" || k === "fortress" || k === "tower") ? 0.8 : 0,
         planted: k === "tower",
-        post: null
+        post: null,
+        aware: false,
+        alertLife: 0
       };
     }
 
@@ -258,6 +264,34 @@
       for (i = 0; i < (map.ships || []).length; i++) {
         var sh = map.ships[i];
         floorDecor.push({ kind: "ship", x: sh.x, y: sh.y, rot: -0.35, v: 0, solid: true, r: 30 });
+        /* Crash-site wreck fringe — skids + scrap around the hull. */
+        if (sectorIndex === 0) {
+          var sk;
+          for (sk = 0; sk < 5; sk++) {
+            var sang = -0.6 + sk * 0.35;
+            var sdist = 48 + sk * 14;
+            floorDecor.push({
+              kind: "skid",
+              x: sh.x + Math.cos(sang) * sdist,
+              y: sh.y + Math.sin(sang) * sdist + 10,
+              rot: sang + 0.2,
+              v: sk,
+              solid: false,
+              r: 0
+            });
+          }
+          for (sk = 0; sk < 4; sk++) {
+            floorDecor.push({
+              kind: sk % 2 ? "scrap" : "rock",
+              x: sh.x + (sk - 1.5) * 28,
+              y: sh.y + 36 + (sk % 3) * 10,
+              rot: sk * 0.7,
+              v: sk,
+              solid: false,
+              r: 0
+            });
+          }
+        }
       }
       for (i = 0; i < (map.crates || []).length; i++) {
         var cr = map.crates[i];
@@ -277,6 +311,7 @@
       var macro = map.macro || 3;
       var clearStart = map.tile * macro * 2.5;
       var litterGap = map.tile * macro * 2.6;
+      var deckName = (map.name || "").toLowerCase();
       var cands = [];
       for (i = 0; i < floorList.length; i++) {
         var cell = floorList[i];
@@ -292,13 +327,25 @@
         var cy = (cell.y + 0.5) * map.tile + (tileHash(cell.x, cell.y, 5) - 0.5) * wander;
         var kind;
         if (outdoor) {
-          kind = h < 0.07 ? "scrap" : h < 0.14 ? "rock" : "stain";
+          kind = h < 0.07 ? "scrap" : h < 0.14 ? "rock" : (h < 0.17 ? "skid" : "stain");
         } else {
           var pick = tileHash(cell.x, cell.y, 13);
           var indoorKinds = [
             "rubble", "gravel", "drain", "bricks", "broken", "bucket", "cans",
             "cracks", "crates", "hose", "lights", "tools", "tyre", "wood", "tin", "sandbag"
           ];
+          /* Deck identity — bias litter so wards read as Med / Vent / Mess / etc. */
+          if (/med/.test(deckName)) {
+            indoorKinds = ["bed", "lights", "cans", "drain", "bucket", "cracks", "tin"];
+          } else if (/vent/.test(deckName)) {
+            indoorKinds = ["duct", "hose", "drain", "tin", "tools", "grate", "cracks"];
+          } else if (/mess/.test(deckName)) {
+            indoorKinds = ["crates", "cans", "bucket", "wood", "tin", "tyre", "sandbag"];
+          } else if (/armour|barrack|gate/.test(deckName)) {
+            indoorKinds = ["crates", "tools", "sandbag", "tin", "bricks", "rubble"];
+          } else if (/reactor|power|coolant|server/.test(deckName)) {
+            indoorKinds = ["duct", "lights", "drain", "hose", "tin", "cracks", "tools"];
+          }
           kind = indoorKinds[Math.floor(pick * indoorKinds.length) % indoorKinds.length];
         }
         cands.push({
@@ -457,7 +504,11 @@
         enemies.push(readyEnemy(makeEnemy(tw.x, tw.y, "tower")));
       }
       updateCamera();
-      showToast(sectorIndex === 0 ? "Crash site — grab the keycard" : map.name);
+      showToast(
+        sectorIndex === 0 ? "Crash site — grab the keycard" :
+        sectorIndex >= window.GameMap.sectorCount() - 1 ? "Salvage bay — drop the core" :
+        map.name
+      );
       persistProgress({ unlockedSector: Math.max(sectorIndex, window.GameSettings.getProgress().unlockedSector) });
     }
 
@@ -527,7 +578,10 @@
       toastMsg = "";
       toastLife = 0;
       flash = 0;
+      flashColour = null;
       shake = 0;
+      doorGlow = 0;
+      victoryT = 0;
       hitMarks.length = 0;
 
       var progress = window.GameSettings.getProgress();
@@ -762,6 +816,17 @@
       return base * (mods.fireScale || 1);
     }
 
+    function markAware(e, canSee) {
+      if (!canSee) return;
+      if (!e.aware) {
+        e.aware = true;
+        e.alertLife = 0.55;
+        sfx("alert");
+      } else if (e.alertLife < 0.12) {
+        e.alertLife = 0.2;
+      }
+    }
+
     function stepEnemy(e, dt) {
       var edx = player.x - e.x;
       var edy = player.y - e.y;
@@ -769,6 +834,7 @@
       var spd = ENEMY_SPEED * e.speed * mods.enemySpeed;
       var nx = edx / elen;
       var ny = edy / elen;
+      if (e.alertLife > 0) e.alertLife -= dt;
 
       if (e.kind === "drone") {
         var ideal = 170;
@@ -776,7 +842,9 @@
         else if (elen > ideal + 50) moveCircle(e, nx * spd * dt, ny * spd * dt, e.r);
         else moveCircle(e, -ny * spd * 0.7 * dt, nx * spd * 0.7 * dt, e.r);
         e.fireCool -= dt;
-        if (e.fireCool <= 0 && elen < 340 && clearLine(e.x, e.y, player.x, player.y)) {
+        var droneSee = elen < 340 && clearLine(e.x, e.y, player.x, player.y);
+        markAware(e, droneSee);
+        if (e.fireCool <= 0 && droneSee) {
           e.fireCool = enemyFireGap(1.35);
           pushShot(e, nx, ny, 260, 3.5, 1, 1.4);
         }
@@ -800,7 +868,9 @@
         var mdx = player.x - mx;
         var mdy = player.y - my;
         var mlen = Math.hypot(mdx, mdy) || 1;
-        if (e.fireCool <= 0 && mlen < 420 && mlen > 28 && clearLine(mx, my, player.x, player.y)) {
+        var towerSee = mlen < 420 && mlen > 28 && clearLine(mx, my, player.x, player.y);
+        markAware(e, towerSee);
+        if (e.fireCool <= 0 && towerSee) {
           e.fireCool = enemyFireGap(1.45);
           enemyShots.push({
             x: mx,
@@ -829,7 +899,9 @@
         }
         if (e.planted) {
           e.fireCool -= dt;
-          if (fortressShouldFire(elen, true, e.fireCool) && clearLine(e.x, e.y, player.x, player.y)) {
+          var fortSee = fortressShouldFire(elen, true, e.fireCool) && clearLine(e.x, e.y, player.x, player.y);
+          markAware(e, fortSee || (elen < 360 && clearLine(e.x, e.y, player.x, player.y)));
+          if (fortSee) {
             e.fireCool = enemyFireGap(1.7);
             pushShot(e, nx, ny, 200, 5, 2, 1.6);
           }
@@ -840,7 +912,9 @@
       /* Grunts (Dave's robots): chase and shoot. */
       moveCircle(e, nx * spd * dt, ny * spd * dt, e.r);
       e.fireCool -= dt;
-      if (e.fireCool <= 0 && elen < 300 && clearLine(e.x, e.y, player.x, player.y)) {
+      var gruntSee = elen < 300 && clearLine(e.x, e.y, player.x, player.y);
+      markAware(e, gruntSee || (elen < 220 && clearLine(e.x, e.y, player.x, player.y)));
+      if (e.fireCool <= 0 && gruntSee) {
         e.fireCool = enemyFireGap(1.15);
         pushShot(e, nx, ny, 280, 3.2, 1, 1.25);
       }
@@ -1044,7 +1118,16 @@
         return;
       }
       ammo -= cost;
-      sfx("shoot");
+      var fxName = gun.fx || "bolt";
+      if (fxName === "spray") sfx("shootSpray");
+      else if (fxName === "pulse") sfx("shootPulse");
+      else if (fxName === "beam") sfx("shootBeam");
+      else if (fxName === "lance") sfx("shootLance");
+      else sfx("shootBolt");
+      if (fxName === "lance") shake = Math.max(shake, 0.22);
+      else if (fxName === "spray") shake = Math.max(shake, 0.16);
+      else if (fxName === "beam") shake = Math.max(shake, 0.1);
+      else shake = Math.max(shake, 0.07);
       var base = player.facing;
       var p;
       for (p = 0; p < gun.pellets; p++) {
@@ -1057,7 +1140,7 @@
           life: gun.fx === "beam" || gun.fx === "lance" ? 0.95 : 1.15,
           r: gun.radius,
           dmg: gun.damage,
-          fx: gun.fx || "bolt",
+          fx: fxName,
           spin: (Math.random() - 0.5) * 8
         });
       }
@@ -1166,7 +1249,7 @@
         unlockedSector: didWin ? window.GameMap.sectorCount() - 1 : sectorIndex,
         clearSuspended: true
       });
-      if (didWin) sfx("win");
+      /* Win sting is played when the salvage victory beat starts. */
       if (typeof onOver === "function") onOver(score, didWin);
     }
 
@@ -1193,7 +1276,20 @@
       if (dt > 0.05) dt = 0.05;
       if (toastLife > 0) toastLife -= dt;
       if (flash > 0) flash -= dt;
+      else flashColour = null;
       if (shake > 0) shake -= dt;
+      if (doorGlow > 0) doorGlow -= dt;
+
+      /* Victory beat — freeze combat, then hand off to the over screen. */
+      if (victoryT > 0) {
+        victoryT -= dt;
+        if (victoryT <= 0) {
+          victoryT = 0;
+          endRun(true);
+        }
+        updateCamera(dt);
+        return;
+      }
 
       if (input.weapon1 && owned.pistol) weaponId = "pistol";
       if (input.weapon2 && owned.shotgun) weaponId = "shotgun";
@@ -1236,6 +1332,11 @@
         showToast(opened === "R" ? "Red door unlocked" :
           opened === "G" ? "Green door unlocked" : "Blue door unlocked");
         sfx("door");
+        doorGlow = 0.85;
+        doorGlowColour = opened === "R" ? "#e11d48" : opened === "G" ? "#16a34a" : "#2563eb";
+        flash = Math.max(flash, 0.28);
+        flashColour = doorGlowColour;
+        shake = Math.max(shake, 0.18);
       }
 
       var ki;
@@ -1423,6 +1524,7 @@
             bullets.splice(j, 1);
             hitMarks.push({ x: e.x, y: e.y, life: 0.25 });
             sfx("hit");
+            shake = Math.max(shake, 0.11 + bullet.dmg * 0.04);
             if (e.hp <= 0) hit = true;
             break;
           }
@@ -1451,7 +1553,15 @@
       if (patchRun) {
         if (nearShip() && input.interactHeld) {
           patchHold += dt;
-          if (patchHold >= 1.35) endRun(true);
+          if (patchHold >= 1.35) {
+            patchHold = 1.35;
+            victoryT = 2.4;
+            flash = 0.55;
+            flashColour = "#fbbf24";
+            shake = 0.35;
+            showToast("SALVAGE COMPLETE");
+            sfx("win");
+          }
         } else {
           patchHold = 0;
         }
@@ -1990,6 +2100,25 @@
       else if (e.kind === "fortress" || e.kind === "boss") drawFortressCore(e);
       else if (e.kind === "drone") drawDroneBeam(e, facing);
       drawHpBar(e);
+      if (e.alertLife > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, e.alertLife * 2.2);
+        ctx.fillStyle = "#fbbf24";
+        ctx.strokeStyle = "#1a120c";
+        ctx.lineWidth = 1.5;
+        var ay = e.y - e.r - 10;
+        ctx.beginPath();
+        ctx.moveTo(e.x, ay - 7);
+        ctx.lineTo(e.x + 5, ay + 2);
+        ctx.lineTo(e.x - 5, ay + 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#1a120c";
+        ctx.fillRect(e.x - 1.2, ay - 4, 2.4, 4);
+        ctx.fillRect(e.x - 1.2, ay + 0.5, 2.4, 2);
+        ctx.restore();
+      }
     }
 
     var platePattern = null;
@@ -2524,6 +2653,47 @@
         ctx.beginPath();
         ctx.ellipse(-3, -3, 3, 2, 0, 0, Math.PI * 2);
         ctx.fill();
+      } else if (d.kind === "skid") {
+        ctx.strokeStyle = "rgba(20,16,12,0.35)";
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-22, 2);
+        ctx.quadraticCurveTo(-4, -3, 24, 1);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(40,32,24,0.22)";
+        ctx.beginPath();
+        ctx.moveTo(-18, 6);
+        ctx.quadraticCurveTo(0, 2, 20, 7);
+        ctx.stroke();
+        ctx.lineCap = "butt";
+        ctx.lineWidth = 1;
+      } else if (d.kind === "bed") {
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        ctx.fillRect(-14, 4, 28, 6);
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillRect(-13, -6, 26, 12);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.fillRect(-11, -4, 14, 8);
+        ctx.fillStyle = "#64748b";
+        ctx.fillRect(4, -5, 8, 10);
+        ctx.strokeStyle = "#1e293b";
+        ctx.strokeRect(-13, -6, 26, 12);
+      } else if (d.kind === "duct" || d.kind === "grate") {
+        ctx.fillStyle = "rgba(0,0,0,0.25)";
+        ctx.fillRect(-12, -8, 24, 16);
+        ctx.fillStyle = "#64748b";
+        ctx.fillRect(-11, -7, 22, 14);
+        ctx.strokeStyle = "#0f172a";
+        var gi;
+        for (gi = -8; gi <= 8; gi += 4) {
+          ctx.beginPath();
+          ctx.moveTo(-10, gi);
+          ctx.lineTo(10, gi);
+          ctx.stroke();
+        }
+        ctx.strokeRect(-11, -7, 22, 14);
       } else if (d.kind === "rubble" || d.kind === "gravel" || d.kind === "drain") {
         var litter = d.kind === "drain" ? junkDrain : d.kind === "gravel" ? junkGravel : junkRubble;
         if (readyImg(litter)) {
@@ -3907,8 +4077,35 @@
 
       drawVignette();
       if (flash > 0) {
-        ctx.fillStyle = "rgba(180,30,30," + (flash * 1.2) + ")";
+        if (flashColour) {
+          ctx.fillStyle = flashColour;
+          ctx.globalAlpha = Math.min(0.45, flash * 0.9);
+          ctx.fillRect(0, 0, w, h);
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.fillStyle = "rgba(180,30,30," + (flash * 1.2) + ")";
+          ctx.fillRect(0, 0, w, h);
+        }
+      }
+      if (doorGlow > 0) {
+        ctx.fillStyle = doorGlowColour;
+        ctx.globalAlpha = Math.min(0.22, doorGlow * 0.28);
         ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+      }
+      if (victoryT > 0) {
+        ctx.fillStyle = "rgba(15, 12, 8, " + (0.25 + (1 - Math.min(1, victoryT / 2.4)) * 0.35) + ")";
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = Math.min(1, victoryT);
+        ctx.fillStyle = "#fbbf24";
+        ctx.font = "800 28px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("SALVAGE COMPLETE", w * 0.5, h * 0.42);
+        ctx.fillStyle = "#f8f1e3";
+        ctx.font = "600 16px system-ui, sans-serif";
+        ctx.fillText("Score " + score, w * 0.5, h * 0.42 + 32);
+        ctx.textAlign = "left";
+        ctx.globalAlpha = 1;
       }
 
       drawMinimap(text, dim, danger, colours);
