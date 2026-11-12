@@ -33,9 +33,6 @@
   }
 
   function closeSheet() {
-    if (openSheetId === "sheet-shop" && game && game.isShopOpen()) {
-      game.closeShop();
-    }
     if (openSheetId) {
       var sheet = $(openSheetId);
       if (sheet) {
@@ -84,9 +81,9 @@
     var copy = $("menu-controls");
     if (!copy) return;
     if (window.GameSettings.getAutoAim()) {
-      copy.textContent = "WASD move · 1–5 guns · Shift dash · F breach · Space fire · E terminal · P pause";
+      copy.textContent = "WASD move · 1–5 guns · Shift dash · F breach · Space fire · shoot LOOT boxes · P pause";
     } else {
-      copy.textContent = "WASD move · mouse aim · 1–5 guns · Shift dash · F breach · click fire · E terminal";
+      copy.textContent = "WASD move · mouse aim · 1–5 guns · Shift dash · F breach · click fire · shoot LOOT boxes";
     }
   }
 
@@ -115,31 +112,6 @@
     }
   }
 
-  function paintShop(snapshot) {
-    if (!snapshot) {
-      closeSheet();
-      return;
-    }
-    var credits = $("shop-credits");
-    var ammo = $("shop-ammo");
-    var hp = $("shop-hp");
-    if (credits) credits.textContent = String(snapshot.score);
-    if (ammo) ammo.textContent = String(snapshot.ammo);
-    if (hp) hp.textContent = snapshot.hp + " / " + snapshot.maxHp;
-
-    document.querySelectorAll("[data-shop-buy]").forEach(function (btn) {
-      var id = btn.getAttribute("data-shop-buy");
-      var ownedGear = (id === "shotgun" || id === "smg" || id === "rifle" || id === "lance" || id === "dash" || id === "hull") && snapshot.owned[id];
-      var carrying = id === "breach" && snapshot.breachCharges >= 1;
-      btn.disabled = !!(ownedGear || carrying);
-      var tag = btn.querySelector(".shop-tag");
-      if (tag) {
-        tag.textContent = ownedGear || carrying ? "Carried" : tag.getAttribute("data-cost") + " cr";
-      }
-    });
-
-    showSheet("sheet-shop");
-  }
 
   function wireTheme() {
     window.Theme.apply(window.Theme.current());
@@ -194,38 +166,16 @@
     });
   }
 
-  function wireShop() {
-    document.querySelectorAll("[data-shop-buy]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        if (!game) return;
-        var next = game.purchase(btn.getAttribute("data-shop-buy"));
-        paintShop(next);
-      });
-    });
-    var close = $("btn-shop-close");
-    if (close) {
-      close.addEventListener("click", function () {
-        if (game) game.closeShop();
-        closeSheet();
-      });
-    }
-  }
 
   function wireChrome() {
     var scrim = $("scrim");
     if (scrim) {
       scrim.addEventListener("click", function () {
-        if (openSheetId === "sheet-shop") return;
         closeSheet();
       });
     }
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape") {
-        if (openSheetId === "sheet-shop") {
-          if (game) game.closeShop();
-          closeSheet();
-          return;
-        }
         if (openSheetId) {
           closeSheet();
           return;
@@ -407,7 +357,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.49";
+  var BUILD = "0.1.53";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;
@@ -435,7 +385,6 @@
   function boot() {
     wireTheme();
     wireSettings();
-    wireShop();
     wireChrome();
 
     var canvas = $("game");
@@ -443,7 +392,6 @@
 
     game = window.ShooterGame.create(canvas);
     game.setOnOver(endGame);
-    game.setOnShop(paintShop);
     window.GameInput.attach(canvas);
 
     var play = $("btn-play");

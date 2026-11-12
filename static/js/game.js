@@ -58,18 +58,6 @@
     }
   };
 
-  var SHOP_ITEMS = [
-    { id: "ammo", kind: "ammo", label: "+30 ammo", cost: 12 },
-    { id: "heal", kind: "heal", label: "+1 HP", cost: 18 },
-    { id: "breach", kind: "charge", label: "Breach charge", cost: 26 },
-    { id: "dash", kind: "gear", label: "Dash", cost: 32 },
-    { id: "shotgun", kind: "weapon", label: "Scatter gun", cost: 28 },
-    { id: "smg", kind: "weapon", label: "Auto gun", cost: 40 },
-    { id: "hull", kind: "gear", label: "Hull patch", cost: 40 },
-    { id: "rifle", kind: "weapon", label: "Rifle", cost: 52 },
-    { id: "lance", kind: "weapon", label: "Lance", cost: 68 }
-  ];
-
   function blankGunOwned() {
     return { pistol: true, shotgun: false, smg: false, rifle: false, lance: false };
   }
@@ -203,7 +191,6 @@
     var camX = 0;
     var camY = 0;
     var onOver = null;
-    var onShop = null;
     var onPause = null;
     var lastInput = null;
     var toastMsg = "";
@@ -414,9 +401,9 @@
         if (!d.solid || !d.r) continue;
         if (Math.hypot(x - d.x, y - d.y) < radius + d.r) return true;
       }
-      if (map && map.creditCrates) {
-        for (i = 0; i < map.creditCrates.length; i++) {
-          var box = map.creditCrates[i];
+      if (map && map.lootCrates) {
+        for (i = 0; i < map.lootCrates.length; i++) {
+          var box = map.lootCrates[i];
           if (box.taken) continue;
           if (Math.hypot(x - box.x, y - box.y) < radius + 12) return true;
         }
@@ -655,15 +642,6 @@
         }
       }
       return best;
-    }
-
-    function nearTerminal() {
-      var i;
-      for (i = 0; i < map.terminals.length; i++) {
-        var t = map.terminals[i];
-        if (circlesHit(player.x, player.y, PLAYER_R, t.x, t.y, PICK_R + 8)) return t;
-      }
-      return null;
     }
 
     function onExit() {
@@ -940,7 +918,10 @@
         doorsOpen: map.doors.map(function (d) { return !!map.tiles[d.y][d.x].open; }),
         keysTaken: map.keys.map(function (k) { return !!k.taken; }),
         cratesTaken: map.ammoCrates.map(function (c) { return !!c.taken; }),
-        creditsTaken: (map.creditCrates || []).map(function (c) { return !!c.taken; }),
+        lootTaken: (map.lootCrates || []).map(function (c) { return !!c.taken; }),
+        creditsTaken: (map.lootCrates || []).map(function (c) { return !!c.taken; }),
+        boothsUsed: (map.healthBooths || []).map(function (b) { return !!b.used; }),
+        gunsTaken: (map.gunPickups || []).map(function (g) { return !!g.taken; }),
         cachesTaken: (map.caches || []).map(function (c) { return !!c.taken; }),
         breached: breached.map(function (c) { return { x: c.x, y: c.y }; }),
         breachCharges: breachCharges,
@@ -960,9 +941,20 @@
       for (i = 0; i < snap.cratesTaken.length && i < map.ammoCrates.length; i++) {
         map.ammoCrates[i].taken = !!snap.cratesTaken[i];
       }
-      if (snap.creditsTaken && map.creditCrates) {
-        for (i = 0; i < snap.creditsTaken.length && i < map.creditCrates.length; i++) {
-          map.creditCrates[i].taken = !!snap.creditsTaken[i];
+      var lootFlags = snap.lootTaken || snap.creditsTaken;
+      if (lootFlags && map.lootCrates) {
+        for (i = 0; i < lootFlags.length && i < map.lootCrates.length; i++) {
+          map.lootCrates[i].taken = !!lootFlags[i];
+        }
+      }
+      if (snap.boothsUsed && map.healthBooths) {
+        for (i = 0; i < snap.boothsUsed.length && i < map.healthBooths.length; i++) {
+          map.healthBooths[i].used = !!snap.boothsUsed[i];
+        }
+      }
+      if (snap.gunsTaken && map.gunPickups) {
+        for (i = 0; i < snap.gunsTaken.length && i < map.gunPickups.length; i++) {
+          map.gunPickups[i].taken = !!snap.gunsTaken[i];
         }
       }
       for (i = 0; i < snap.cachesTaken.length && i < (map.caches || []).length; i++) {
@@ -1069,98 +1061,95 @@
       fireWait = gun.cooldown || 0.2;
     }
 
-    function shopSnapshot() {
-      return {
-        score: score,
-        ammo: ammo,
-        hp: hp,
-        maxHp: maxHp,
-        owned: {
-          pistol: true,
-          shotgun: !!owned.shotgun,
-          smg: !!owned.smg,
-          rifle: !!owned.rifle,
-          lance: !!owned.lance,
-          dash: !!owned.dash,
-          hull: !!owned.hull
-        },
-        breachCharges: breachCharges,
-        items: SHOP_ITEMS
-      };
-    }
-
-    function openShop() {
-      shopOpen = true;
-      paused = true;
-      sfx("shop");
-      if (typeof onShop === "function") onShop(shopSnapshot());
-      if (typeof onPause === "function") onPause(true);
-    }
-
-    function closeShop() {
-      shopOpen = false;
-      paused = false;
-      showToast("Terminal closed");
-      if (typeof onPause === "function") onPause(false);
-    }
-
-    function purchase(id) {
-      var item = null;
+    function nextMissingGun() {
       var i;
-      for (i = 0; i < SHOP_ITEMS.length; i++) {
-        if (SHOP_ITEMS[i].id === id) item = SHOP_ITEMS[i];
+      for (i = 1; i < GUN_ORDER.length; i++) {
+        var id = GUN_ORDER[i];
+        if (!owned[id] && WEAPONS[id]) return id;
       }
-      if (!item) return shopSnapshot();
-      if (score < item.cost) {
-        showToast("Need " + item.cost + " credits");
-        sfx("empty");
-        return shopSnapshot();
+      return null;
+    }
+
+    function grantAmmo(toastPrefix) {
+      var n = Math.round(AMMO_PICKUP * mods.ammo);
+      ammo += n;
+      showToast((toastPrefix || "AMMO") + " +" + n);
+    }
+
+    function grantHealth(amount, label) {
+      if (hp >= maxHp) {
+        grantAmmo("Full HP — AMMO");
+        return;
       }
-      if (item.kind === "ammo") {
-        score -= item.cost;
-        ammo += Math.round(AMMO_PICKUP * mods.ammo);
-        showToast("Ammo restocked");
-        sfx("shop");
-      } else if (item.kind === "weapon") {
-        if (owned[item.id]) {
-          showToast("Already owned");
-          return shopSnapshot();
-        }
-        score -= item.cost;
-        owned[item.id] = true;
-        weaponId = item.id;
-        showToast(WEAPONS[item.id].name + " online");
-        sfx("shop");
-        persistProgress();
-      } else if (item.kind === "heal") {
-        if (hp >= maxHp) {
-          showToast("HP full");
-          return shopSnapshot();
-        }
-        score -= item.cost;
-        hp = Math.min(maxHp, hp + 1);
-        showToast("Vitals restored");
-        sfx("shop");
-      } else if (item.kind === "gear") {
-        if (owned[item.id]) {
-          showToast("Already carried");
-          return shopSnapshot();
-        }
-        score -= item.cost;
-        owned[item.id] = true;
-        showToast(item.id === "dash" ? "Dash online — Shift" : "Hull patch stowed");
-        sfx("shop");
-      } else if (item.kind === "charge") {
+      hp = Math.min(maxHp, hp + amount);
+      showToast((label || "HEALTH") + " +" + amount);
+    }
+
+    function unlockGun(id, alreadyToast) {
+      if (!WEAPONS[id]) return false;
+      if (owned[id]) {
+        if (alreadyToast) grantAmmo(WEAPONS[id].name + " owned — AMMO");
+        return false;
+      }
+      owned[id] = true;
+      weaponId = id;
+      showToast(WEAPONS[id].name.toUpperCase() + " unlocked");
+      persistProgress();
+      return true;
+    }
+
+    function grantGear(id) {
+      if (id === "breach") {
         if (breachCharges >= 1) {
-          showToast("Already carrying a charge");
-          return shopSnapshot();
+          grantAmmo("Breach carried — AMMO");
+          return;
         }
-        score -= item.cost;
         breachCharges = 1;
-        showToast("Breach charge — press F at a wall");
-        sfx("shop");
+        showToast("BREACH charge — press F at a wall");
+        return;
       }
-      return shopSnapshot();
+      if (id === "dash") {
+        if (owned.dash) {
+          grantAmmo("Dash owned — AMMO");
+          return;
+        }
+        owned.dash = true;
+        showToast("DASH unlocked — Shift");
+        return;
+      }
+      if (id === "hull") {
+        if (owned.hull) {
+          grantAmmo("Hull carried — AMMO");
+          return;
+        }
+        owned.hull = true;
+        showToast("HULL patch stowed");
+      }
+    }
+
+    /* Shootable LOOT boxes — ammo / health / next gun / gear. */
+    function lootKindFor(box) {
+      var n = ((box && box.seed) || 0) % 10;
+      if (n === 0 || n === 3 || n === 7) return "ammo";
+      if (n === 1 || n === 5) return "health";
+      if (n === 2 || n === 8) return "weapon";
+      if (n === 4) return "breach";
+      if (n === 6) return "dash";
+      return "hull";
+    }
+
+    function openLootBox(box) {
+      var kind = lootKindFor(box);
+      if (kind === "ammo") grantAmmo("AMMO");
+      else if (kind === "health") grantHealth(1, "HEALTH");
+      else if (kind === "weapon") {
+        var gun = nextMissingGun();
+        if (gun) unlockGun(gun, false);
+        else grantAmmo("AMMO");
+      } else {
+        grantGear(kind);
+      }
+      sfx("pickup");
     }
 
     function endRun(didWin) {
@@ -1180,7 +1169,7 @@
     }
 
     function setPaused(value) {
-      if (!playing || over || shopOpen) return;
+      if (!playing || over) return;
       paused = !!value;
       if (typeof onPause === "function") onPause(paused);
       if (paused) showToast("Paused");
@@ -1191,15 +1180,10 @@
       lastInput = input;
 
       if (input.pause) {
-        if (shopOpen) {
-          closeShop();
-          if (typeof onShop === "function") onShop(null);
-        } else {
-          setPaused(!paused);
-        }
+        setPaused(!paused);
       }
 
-      if (paused || shopOpen) {
+      if (paused) {
         if (toastLife > 0) toastLife -= dt;
         return;
       }
@@ -1232,11 +1216,6 @@
         iframes = Math.max(iframes, 0.14);
       }
       if (dashCool > 0) dashCool -= dt;
-
-      if (input.interact && nearTerminal()) {
-        openShop();
-        return;
-      }
 
       if (dashLeft > 0) {
         moveCircle(player, dashVx * dt, dashVy * dt, PLAYER_R);
@@ -1279,10 +1258,9 @@
           cache.taken = true;
           if (cache.kind === "patch" && !owned.hull) {
             owned.hull = true;
-            showToast("Hull patch");
+            showToast("HULL patch");
           } else {
-            ammo += Math.round(AMMO_PICKUP * mods.ammo);
-            showToast("Cache ammo +" + Math.round(AMMO_PICKUP * mods.ammo));
+            grantAmmo("AMMO");
           }
           sfx("pickup");
         }
@@ -1293,8 +1271,30 @@
         if (crate.taken) continue;
         if (circlesHit(player.x, player.y, PLAYER_R, crate.x, crate.y, PICK_R)) {
           crate.taken = true;
-          ammo += Math.round(AMMO_PICKUP * mods.ammo);
-          showToast("Ammo +" + Math.round(AMMO_PICKUP * mods.ammo));
+          grantAmmo("AMMO");
+          sfx("pickup");
+        }
+      }
+
+      for (ki = 0; ki < (map.gunPickups || []).length; ki++) {
+        var gp = map.gunPickups[ki];
+        if (gp.taken) continue;
+        if (circlesHit(player.x, player.y, PLAYER_R, gp.x, gp.y, PICK_R)) {
+          gp.taken = true;
+          unlockGun(gp.gun, true);
+          sfx("pickup");
+        }
+      }
+
+      for (ki = 0; ki < (map.healthBooths || []).length; ki++) {
+        var booth = map.healthBooths[ki];
+        if (booth.used) continue;
+        if (circlesHit(player.x, player.y, PLAYER_R, booth.x, booth.y, PICK_R + 6)) {
+          if (hp >= maxHp) continue;
+          booth.used = true;
+          var healed = Math.min(2, maxHp - hp);
+          hp += healed;
+          showToast("HEALTH booth +" + healed);
           sfx("pickup");
         }
       }
@@ -1345,17 +1345,16 @@
           }
           break;
         }
-        if (!cracked && map.creditCrates) {
+        if (!cracked && map.lootCrates) {
           var ci;
-          for (ci = 0; ci < map.creditCrates.length; ci++) {
-            var box = map.creditCrates[ci];
+          for (ci = 0; ci < map.lootCrates.length; ci++) {
+            var box = map.lootCrates[ci];
             if (box.taken) continue;
             if (circlesHit(b.x, b.y, b.r, box.x, box.y, 14)) {
               box.taken = true;
-              score += box.credits || 8;
               hitMarks.push({ x: box.x, y: box.y, life: 0.3 });
-              showToast("+" + (box.credits || 8) + " credits");
               sfx("hit");
+              openLootBox(box);
               cracked = true;
               break;
             }
@@ -2726,83 +2725,154 @@
       ctx.lineWidth = 1;
     }
 
-    /* 0.1.3 door plate — one ASCII/MACRO cell, key colour lock. */
+    /* Deck bands keep the 0.1.3 lip system; only the metal tint changes. */
+    function wallPalette(outdoor) {
+      var band = sectorIndex <= 4 ? "warm" : (sectorIndex <= 11 ? "cool" : "dark");
+      if (band === "warm") {
+        return outdoor
+          ? { hi: "#f0e2c8", mid: "#c4a06a", lo: "#8a6844", face: "#6b4a2e", faceLo: "#2c1b12", ink: "#1a120c" }
+          : { hi: "#e8d8b8", mid: "#b89568", lo: "#7a5a3c", face: "#6a4a30", faceLo: "#2a1a10", ink: "#1a120c" };
+      }
+      if (band === "cool") {
+        return outdoor
+          ? { hi: "#d5dbe3", mid: "#8e97a3", lo: "#4e5866", face: "#5b6572", faceLo: "#1a1f28", ink: "#0b0f14" }
+          : { hi: "#c8d0d9", mid: "#7e8894", lo: "#434c58", face: "#525c68", faceLo: "#151a22", ink: "#0b0f14" };
+      }
+      return {
+        hi: outdoor ? "#b8b3ad" : "#a8a39c",
+        mid: outdoor ? "#6e6963" : "#5c5852",
+        lo: outdoor ? "#35322e" : "#2c2926",
+        face: "#4a4540",
+        faceLo: "#12100e",
+        ink: "#0a0908"
+      };
+    }
+
+    /* Door = wall plate + big key-colour lock face (readable from farther). */
     function drawMetalDoor(px, py, size, colour) {
+      var pal = wallPalette(false);
+      var lamp = colour || ORANGE;
       var s = size + 0.5;
-      var plate = ctx.createLinearGradient(px, py, px, py + s);
-      plate.addColorStop(0, "#efe0c4");
-      plate.addColorStop(0.35, "#d2b48a");
-      plate.addColorStop(1, "#8d6b45");
+      var plate = ctx.createLinearGradient(px, py, px + s, py + s);
+      plate.addColorStop(0, pal.hi);
+      plate.addColorStop(0.4, pal.mid);
+      plate.addColorStop(1, pal.lo);
       ctx.fillStyle = plate;
-      roundPlate(px + 2, py + 2, s - 4, s - 4, 6);
+      roundPlate(px + 1, py + 1, s - 2, s - 2, 4);
       ctx.fill();
-      ctx.strokeStyle = "#1a120c";
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = pal.ink;
+      ctx.lineWidth = 2.5;
       ctx.stroke();
-      ctx.strokeStyle = "rgba(255,244,220,0.55)";
-      ctx.lineWidth = 2;
+      /* Soft wall bevel so it matches neighbouring plates. */
+      ctx.strokeStyle = "rgba(255,255,255,0.26)";
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(px + 8, py + s - 8);
-      ctx.lineTo(px + 8, py + 8);
-      ctx.lineTo(px + s - 8, py + 8);
+      ctx.moveTo(px + 6, py + s - 6);
+      ctx.lineTo(px + 6, py + 6);
+      ctx.lineTo(px + s - 6, py + 6);
       ctx.stroke();
-      ctx.fillStyle = colour || ORANGE;
-      roundPlate(px + 6, py + 8, 7, s - 16, 2);
+      /* Big key bar — the main read from distance. */
+      var barH = Math.max(10, s * 0.28);
+      var barY = py + (s - barH) * 0.42;
+      ctx.fillStyle = lamp;
+      roundPlate(px + 5, barY, s - 10, barH, 3);
       ctx.fill();
-      ctx.strokeStyle = "#1a120c";
+      ctx.strokeStyle = pal.ink;
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = "#1a120c";
-      roundPlate(px + s * 0.5 - 8, py + s * 0.5 - 10, 16, 20, 3);
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillRect(px + 8, barY + 3, (s - 16) * 0.45, 2.5);
+      /* Lock plate */
+      ctx.fillStyle = pal.ink;
+      roundPlate(px + s * 0.5 - 7, py + s * 0.68, 14, 12, 2);
       ctx.fill();
-      ctx.fillStyle = colour || ORANGE;
-      ctx.fillRect(px + s * 0.5 - 5, py + s * 0.5 - 6, 10, 6);
+      ctx.fillStyle = lamp;
       ctx.beginPath();
-      ctx.arc(px + s * 0.5, py + s * 0.5 + 6, 3, 0, Math.PI * 2);
+      ctx.arc(px + s * 0.5, py + s * 0.68 + 6, 2.8, 0, Math.PI * 2);
       ctx.fill();
-      rivetAt(px + 14, py + 12, 2.4);
-      rivetAt(px + s - 14, py + 12, 2.4);
-      rivetAt(px + 14, py + s - 18, 2.4);
-      rivetAt(px + s - 14, py + s - 18, 2.4);
-      var doorFace = ctx.createLinearGradient(px, py + s - 8, px, py + s);
-      doorFace.addColorStop(0, "#8a6244");
-      doorFace.addColorStop(1, "#3a2416");
+      rivetAt(px + 11, py + 10, 2);
+      rivetAt(px + s - 11, py + 10, 2);
+      rivetAt(px + 11, py + s - 12, 2);
+      rivetAt(px + s - 11, py + s - 12, 2);
+      var doorFace = ctx.createLinearGradient(px, py + s - 7, px, py + s);
+      doorFace.addColorStop(0, pal.face);
+      doorFace.addColorStop(1, pal.faceLo);
       ctx.fillStyle = doorFace;
-      ctx.fillRect(px + 2, py + s - 8, s - 4, 8);
+      ctx.fillRect(px + 2, py + s - 7, s - 4, 7);
+      /* Colour rim so closed doors never look like plain wall. */
+      ctx.strokeStyle = lamp;
+      ctx.lineWidth = Math.max(3, size * 0.08);
+      ctx.strokeRect(px + 2, py + 2, s - 4, s - 4);
       ctx.lineWidth = 1;
     }
 
-    /* 0.1.3 metal wall — neighbor lips make clean corners/crosses. */
+    /* Metal wall — 0.1.3 neighbor lips + deck tint / panel dress. */
     function drawMetalWall(px, py, size, tx, ty, step) {
       step = step || 1;
-      var lip = Math.max(4, Math.round(size * (9 / 48)));
+      var lip = Math.max(4, Math.round(size * (8 / 48)));
       var south = !solidTile(tx, ty + step);
       var east = !solidTile(tx + step, ty);
       var north = !solidTile(tx, ty - step);
       var west = !solidTile(tx - step, ty);
       var topW = size - (east ? lip : 0);
       var topH = size - (south ? lip : 0);
+      var outdoor = floorUnderWall(tx, ty);
+      var pal = wallPalette(outdoor);
+      var shade = tileHash(tx, ty, 3);
       var plate = ctx.createLinearGradient(px, py, px + topW, py + topH);
-      plate.addColorStop(0, "#f3e6cf");
-      plate.addColorStop(0.5, "#c4a06a");
-      plate.addColorStop(1, "#8a6844");
+      plate.addColorStop(0, shade > 0.55 ? pal.hi : pal.mid);
+      plate.addColorStop(0.45, shade > 0.55 ? pal.mid : pal.lo);
+      plate.addColorStop(1, pal.lo);
       ctx.fillStyle = plate;
       ctx.fillRect(px, py, topW + 0.5, topH + 0.5);
 
-      ctx.fillStyle = "rgba(42,26,14,0.5)";
+      /* Soft inner bevel so long runs read as one slab. */
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(px + 2, py + topH - 2);
+      ctx.lineTo(px + 2, py + 2);
+      ctx.lineTo(px + topW - 2, py + 2);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(0,0,0,0.28)";
+      ctx.beginPath();
+      ctx.moveTo(px + 2, py + topH - 2);
+      ctx.lineTo(px + topW - 2, py + topH - 2);
+      ctx.lineTo(px + topW - 2, py + 2);
+      ctx.stroke();
+
+      /* Light panel seam — denser on later decks. */
+      var seamChance = sectorIndex <= 4 ? 0.22 : (sectorIndex <= 11 ? 0.38 : 0.55);
+      if (tileHash(tx, ty, 8) < seamChance && topW > 24 && topH > 24) {
+        ctx.strokeStyle = "rgba(0,0,0,0.16)";
+        ctx.lineWidth = 1;
+        if (tileHash(tx, ty, 9) > 0.5) {
+          ctx.beginPath();
+          ctx.moveTo(px + topW * 0.5, py + 5);
+          ctx.lineTo(px + topW * 0.5, py + topH - 5);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(px + 5, py + topH * 0.5);
+          ctx.lineTo(px + topW - 5, py + topH * 0.5);
+          ctx.stroke();
+        }
+      }
+
+      ctx.fillStyle = "rgba(12,16,22,0.45)";
       if (!east) ctx.fillRect(px + topW - 2, py, 2, topH);
       if (!south) ctx.fillRect(px, py + topH - 2, topW, 2);
 
-      ctx.strokeStyle = "#1a120c";
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = pal.ink;
+      ctx.lineWidth = 2;
       ctx.beginPath();
       if (north) {
-        ctx.moveTo(px, py + 1.5);
-        ctx.lineTo(px + topW, py + 1.5);
+        ctx.moveTo(px, py + 1.25);
+        ctx.lineTo(px + topW, py + 1.25);
       }
       if (west) {
-        ctx.moveTo(px + 1.5, py);
-        ctx.lineTo(px + 1.5, py + topH);
+        ctx.moveTo(px + 1.25, py);
+        ctx.lineTo(px + 1.25, py + topH);
       }
       if (south) {
         ctx.moveTo(px, py + topH - 1);
@@ -2815,48 +2885,120 @@
       ctx.stroke();
 
       var h = tileHash(tx, ty, 4);
-      if (h > 0.4 && topW > 22 && topH > 22) {
-        var inset = 7 + Math.floor(tileHash(tx, ty, 6) * 6);
+      var panelCut = sectorIndex <= 4 ? 0.45 : (sectorIndex <= 11 ? 0.36 : 0.28);
+      var rivetCut = sectorIndex <= 4 ? 0.78 : (sectorIndex <= 11 ? 0.68 : 0.55);
+      if (h > panelCut && topW > 22 && topH > 22) {
+        var inset = 6 + Math.floor(tileHash(tx, ty, 6) * 5);
         var pw = topW - inset * 2;
         var ph = topH - inset * 2;
         if (pw > 8 && ph > 8) {
-          ctx.strokeStyle = "rgba(26,18,12,0.5)";
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(px + inset, py + inset, pw, ph);
-          if (h > 0.72) {
-            rivetAt(px + inset + 4, py + inset + 4, 1.8);
-            rivetAt(px + inset + pw - 4, py + inset + 4, 1.8);
+          ctx.fillStyle = sectorIndex > 11 ? "rgba(10,8,6,0.28)" : "rgba(15,20,28,0.18)";
+          ctx.fillRect(px + inset, py + inset, pw, ph);
+          ctx.strokeStyle = "rgba(255,255,255,0.12)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(px + inset + 0.5, py + inset + 0.5, pw - 1, ph - 1);
+          /* Late decks: a couple of wear nicks. */
+          if (sectorIndex > 11 && tileHash(tx, ty, 11) > 0.6) {
+            ctx.strokeStyle = "rgba(0,0,0,0.35)";
+            ctx.beginPath();
+            ctx.moveTo(px + inset + 3, py + inset + ph * 0.35);
+            ctx.lineTo(px + inset + pw * 0.4, py + inset + ph * 0.55);
+            ctx.stroke();
+          }
+          if (h > rivetCut) {
+            rivetAt(px + inset + 4, py + inset + 4, 1.7);
+            rivetAt(px + inset + pw - 4, py + inset + 4, 1.7);
+            rivetAt(px + inset + 4, py + inset + ph - 4, 1.7);
+            rivetAt(px + inset + pw - 4, py + inset + ph - 4, 1.7);
           }
         }
       } else if (topW > 28 && topH > 28) {
-        rivetAt(px + 10, py + 10, 2);
-        rivetAt(px + topW - 10, py + 10, 2);
+        rivetAt(px + 9, py + 9, 1.9);
+        rivetAt(px + topW - 9, py + 9, 1.9);
+        if (sectorIndex > 4) {
+          rivetAt(px + 9, py + topH - 9, 1.9);
+          rivetAt(px + topW - 9, py + topH - 9, 1.9);
+        }
       }
 
+      /* Open-edge trim: light on floor-facing, dark on wall-facing. */
       if (north) {
-        ctx.strokeStyle = "rgba(255,244,220,0.5)";
+        ctx.strokeStyle = "rgba(255,255,255,0.45)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px + 3, py + 2.5);
+        ctx.lineTo(px + Math.max(6, topW - 3), py + 2.5);
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = "rgba(0,0,0,0.35)";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(px + 4, py + 4);
-        ctx.lineTo(px + Math.max(8, topW - 4), py + 4);
+        ctx.moveTo(px + 1, py + 1);
+        ctx.lineTo(px + topW - 1, py + 1);
+        ctx.stroke();
+      }
+      if (west) {
+        ctx.strokeStyle = "rgba(255,255,255,0.4)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px + 2.5, py + 3);
+        ctx.lineTo(px + 2.5, py + Math.max(6, topH - 3));
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = "rgba(0,0,0,0.32)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px + 1, py + 1);
+        ctx.lineTo(px + 1, py + topH - 1);
         ctx.stroke();
       }
       if (south) {
         var face = ctx.createLinearGradient(px, py + topH, px, py + size);
-        face.addColorStop(0, "#8a6244");
-        face.addColorStop(1, "#3a2416");
+        face.addColorStop(0, pal.face);
+        face.addColorStop(1, pal.faceLo);
         ctx.fillStyle = face;
         ctx.fillRect(px, py + topH, topW + 0.5, lip + 0.5);
-        ctx.fillStyle = "rgba(255,220,180,0.28)";
+        ctx.fillStyle = "rgba(255,255,255,0.28)";
         ctx.fillRect(px, py + topH, topW, 2);
+      } else {
+        ctx.strokeStyle = "rgba(0,0,0,0.3)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px + 1, py + topH - 1);
+        ctx.lineTo(px + topW - 1, py + topH - 1);
+        ctx.stroke();
       }
       if (east) {
-        ctx.fillStyle = "#2c1b12";
+        ctx.fillStyle = pal.faceLo;
         ctx.fillRect(px + topW, py, lip + 0.5, size + 0.5);
-        ctx.fillStyle = "rgba(255,220,180,0.12)";
+        ctx.fillStyle = "rgba(255,255,255,0.16)";
         ctx.fillRect(px + topW, py, 2, size);
+      } else {
+        ctx.strokeStyle = "rgba(0,0,0,0.3)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px + topW - 1, py + 1);
+        ctx.lineTo(px + topW - 1, py + topH - 1);
+        ctx.stroke();
       }
       ctx.lineWidth = 1;
+    }
+
+    /* Photo wall/join as ONE MACRO cell only — never long runs. */
+    function stampWallCell(img, px, py, size, rot) {
+      if (!readyImg(img) || !(size > 4)) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(px, py, size, size);
+      ctx.clip();
+      ctx.globalAlpha = 0.42;
+      ctx.translate(px + size * 0.5, py + size * 0.5);
+      if (rot) ctx.rotate(rot);
+      var cover = Math.max(size / img.naturalWidth, size / img.naturalHeight) * 1.08;
+      var dw = img.naturalWidth * cover;
+      var dh = img.naturalHeight * cover;
+      ctx.drawImage(img, -dw * 0.5, -dh * 0.5, dw, dh);
+      ctx.restore();
     }
 
     function drawKeycard(x, y, colour) {
@@ -2885,9 +3027,23 @@
       ctx.lineWidth = 1;
     }
 
+    function drawWorldLabel(x, y, text, fill) {
+      ctx.save();
+      ctx.font = "800 9px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = "rgba(12,10,8,0.9)";
+      ctx.strokeText(text, x, y - 22);
+      ctx.fillStyle = fill || "#fff7ed";
+      ctx.fillText(text, x, y - 22);
+      ctx.restore();
+    }
+
     function drawAmmoCrate(x, y) {
       if (readyImg(barrelArt)) {
         ctx.drawImage(barrelArt, x - 16, y - 16, 32, 32);
+        drawWorldLabel(x, y, "AMMO", ORANGE);
         return;
       }
       ctx.save();
@@ -2925,11 +3081,13 @@
       rivetAt(11, 8, 1.8);
       ctx.lineWidth = 1;
       ctx.restore();
+      drawWorldLabel(x, y, "AMMO", ORANGE);
     }
 
-    function drawCreditCrate(x, y) {
+    function drawLootCrate(x, y) {
       if (readyImg(crateArt)) {
         ctx.drawImage(crateArt, x - 18, y - 18, 36, 36);
+        drawWorldLabel(x, y, "LOOT", YELLOW);
         return;
       }
       ctx.save();
@@ -2953,19 +3111,65 @@
       ctx.fillRect(-14, -2, 28, 3);
       ctx.fillRect(-2, -12, 4, 24);
       ctx.fillStyle = "#fff7d6";
-      ctx.font = "800 10px system-ui, sans-serif";
+      ctx.font = "800 9px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("CR", 0, 1);
+      ctx.fillText("LOOT", 0, 1);
       ctx.strokeStyle = "#1a120c";
       ctx.lineWidth = 1.2;
-      ctx.strokeText("CR", 0, 1);
+      ctx.strokeText("LOOT", 0, 1);
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
       rivetAt(-10, -8, 1.5);
       rivetAt(10, -8, 1.5);
       ctx.lineWidth = 1;
       ctx.restore();
+      drawWorldLabel(x, y, "LOOT", YELLOW);
+    }
+
+    function drawHealthBooth(x, y, used) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = "rgba(26,18,12,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(1, 10, 14, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = used ? "#64748b" : "#e2e8f0";
+      roundPlate(-12, -14, 24, 26, 3);
+      ctx.fill();
+      ctx.strokeStyle = "#1a120c";
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      ctx.fillStyle = used ? "#94a3b8" : "#ef4444";
+      ctx.fillRect(-3, -8, 6, 14);
+      ctx.fillRect(-8, -3, 16, 6);
+      ctx.restore();
+      drawWorldLabel(x, y, used ? "USED" : "HEALTH", used ? "#94a3b8" : "#fda4af");
+    }
+
+    function drawGunPickup(x, y, gunId) {
+      var gun = WEAPONS[gunId] || WEAPONS.pistol;
+      var label = (gun.name || "GUN").toUpperCase();
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = "rgba(26,18,12,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(1, 8, 13, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      var plate = ctx.createLinearGradient(-14, -10, 14, 10);
+      plate.addColorStop(0, "#cbd5e1");
+      plate.addColorStop(1, "#475569");
+      ctx.fillStyle = plate;
+      roundPlate(-14, -10, 28, 18, 3);
+      ctx.fill();
+      ctx.strokeStyle = "#1a120c";
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      ctx.fillStyle = ORANGE;
+      ctx.fillRect(-10, -3, 20, 5);
+      ctx.strokeRect(-10, -3, 20, 5);
+      ctx.restore();
+      drawWorldLabel(x, y, label, ORANGE);
     }
 
     function drawTowerCannon(cx, cy) {
@@ -3087,30 +3291,9 @@
       ctx.strokeStyle = "#1a120c";
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = "#1a120c";
-      ctx.font = "800 8px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(cache.kind === "patch" ? "PATCH" : "CACHE", 0, 1);
-      ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
       ctx.restore();
-    }
-
-    function drawTerminalProp(x, y, dim) {
-      ctx.fillStyle = "#1e293b";
-      ctx.fillRect(x - 11, y - 13, 22, 26);
-      ctx.strokeStyle = "#64748b";
-      ctx.strokeRect(x - 11, y - 13, 22, 26);
-      ctx.fillStyle = "#0ea5e9";
-      ctx.fillRect(x - 8, y - 9, 16, 11);
-      ctx.fillStyle = "#e0f2fe";
-      ctx.fillRect(x - 6, y - 7, 12, 3);
-      ctx.fillStyle = dim;
-      ctx.font = "10px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("E", x, y + 20);
-      ctx.textAlign = "left";
+      drawWorldLabel(cache.x, cache.y, cache.kind === "patch" ? "HULL" : "AMMO",
+        cache.kind === "patch" ? TEAL : ORANGE);
     }
 
     function drawMinimap(text, dim, danger, colours) {
@@ -3331,74 +3514,40 @@
         for (ax = ax0; ax <= ax1; ax++) {
           var tx = ax * macro;
           var ty = ay * macro;
+          var px = tx * t;
+          var py = ty * t;
           if (wallCell(tx, ty)) {
-            drawMetalWall(tx * t, ty * t, size, tx, ty, macro);
+            drawMetalWall(px, py, size, tx, ty, macro);
+            var arms = wallArmature(ax, ay, macro);
+            if (arms.junction) {
+              /* Single-cell L / T / + stamp only — clipped to this MACRO block. */
+              var joinImg = null;
+              var rot = 0;
+              if (arms.arms === 4 && readyImg(joinX)) {
+                joinImg = joinX;
+              } else if (arms.arms === 3 && readyImg(joinT)) {
+                joinImg = joinT;
+                if (!arms.n) rot = 0;
+                else if (!arms.e) rot = Math.PI * 0.5;
+                else if (!arms.s) rot = Math.PI;
+                else rot = -Math.PI * 0.5;
+              } else if (readyImg(joinL)) {
+                joinImg = joinL;
+                if (arms.e && arms.s) rot = 0;
+                else if (arms.s && arms.w) rot = Math.PI * 0.5;
+                else if (arms.w && arms.n) rot = Math.PI;
+                else rot = -Math.PI * 0.5;
+              }
+              if (joinImg) stampWallCell(joinImg, px, py, size, rot);
+            } else if (readyImg(wallArt)) {
+              /* Straight cell: wall.jpg as one-cell texture stamp. */
+              var horiz = arms.e || arms.w || (!arms.n && !arms.s);
+              stampWallCell(wallArt, px, py, size, horiz ? 0 : Math.PI * 0.5);
+            }
           } else if (closedDoorCell(tx, ty)) {
             var tile = map.tiles[ty][tx];
-            drawMetalDoor(tx * t, ty * t, size, colours[tile.colour] || ORANGE);
+            drawMetalDoor(px, py, size, colours[tile.colour] || ORANGE);
           }
-        }
-      }
-    }
-
-    /* L / T / + pieces. Clip so long arms don't paint into open corridors. */
-    function drawJoinSprite(img, cx, cy, rot, ax, ay, armPx, thick) {
-      if (!readyImg(img)) return;
-      var scale = thick / armPx;
-      var dw = img.naturalWidth * scale;
-      var dh = img.naturalHeight * scale;
-      var clip = thick * 1.55;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(cx - clip, cy - clip, clip * 2, clip * 2);
-      ctx.clip();
-      ctx.translate(cx, cy);
-      ctx.rotate(rot);
-      ctx.drawImage(img, -ax * dw, -ay * dh, dw, dh);
-      ctx.restore();
-    }
-
-    function drawWallJoins(x0, y0, x1, y1, t) {
-      if (!map || !map.macro) return;
-      var macro = map.macro;
-      var thick = t * macro;
-      var ax0 = Math.max(0, Math.floor(x0 / macro) - 1);
-      var ay0 = Math.max(0, Math.floor(y0 / macro) - 1);
-      var ax1 = Math.min(Math.floor((map.cols - 1) / macro), Math.floor(x1 / macro) + 1);
-      var ay1 = Math.min(Math.floor((map.rows - 1) / macro), Math.floor(y1 / macro) + 1);
-      var concrete = wallConcrete() || "#5a5652";
-      var ay;
-      for (ay = ay0; ay <= ay1; ay++) {
-        var ax;
-        for (ax = ax0; ax <= ax1; ax++) {
-          if (!blockIsWall(ax, ay, macro)) continue;
-          var arms = wallArmature(ax, ay, macro);
-          if (!arms.junction) continue;
-          var px = ax * macro * t;
-          var py = ay * macro * t;
-          ctx.fillStyle = concrete;
-          ctx.fillRect(px, py, thick, thick);
-          var cx = px + thick * 0.5;
-          var cy = py + thick * 0.5;
-          if (arms.arms === 4) {
-            drawJoinSprite(joinX, cx, cy, 0, 598.5 / 1199, 576.5 / 1217, 119, thick);
-            continue;
-          }
-          if (arms.arms === 3) {
-            var rotT = 0;
-            if (!arms.n) rotT = 0;
-            else if (!arms.e) rotT = Math.PI * 0.5;
-            else if (!arms.s) rotT = Math.PI;
-            else rotT = -Math.PI * 0.5;
-            drawJoinSprite(joinT, cx, cy, rotT, 546.5 / 1094, 52 / 984, 106, thick);
-            continue;
-          }
-          var rotL = 0;
-          if (arms.e && arms.s) rotL = 0;
-          else if (arms.s && arms.w) rotL = Math.PI * 0.5;
-          else if (arms.w && arms.n) rotL = Math.PI;
-          else rotL = -Math.PI * 0.5;
-          drawJoinSprite(joinL, cx, cy, rotL, 62 / 897, 66 / 1001, 125, thick);
         }
       }
     }
@@ -3531,17 +3680,20 @@
         drawFloorDecorItem(decor);
       }
 
-      for (var ti = 0; ti < map.terminals.length; ti++) {
-        drawTerminalProp(map.terminals[ti].x, map.terminals[ti].y, dim);
-      }
-
       for (var ai = 0; ai < map.ammoCrates.length; ai++) {
         if (map.ammoCrates[ai].taken) continue;
         drawAmmoCrate(map.ammoCrates[ai].x, map.ammoCrates[ai].y);
       }
-      for (var cri = 0; cri < (map.creditCrates || []).length; cri++) {
-        if (map.creditCrates[cri].taken) continue;
-        drawCreditCrate(map.creditCrates[cri].x, map.creditCrates[cri].y);
+      for (var cri = 0; cri < (map.lootCrates || []).length; cri++) {
+        if (map.lootCrates[cri].taken) continue;
+        drawLootCrate(map.lootCrates[cri].x, map.lootCrates[cri].y);
+      }
+      for (var hi = 0; hi < (map.healthBooths || []).length; hi++) {
+        drawHealthBooth(map.healthBooths[hi].x, map.healthBooths[hi].y, !!map.healthBooths[hi].used);
+      }
+      for (var gi = 0; gi < (map.gunPickups || []).length; gi++) {
+        if (map.gunPickups[gi].taken) continue;
+        drawGunPickup(map.gunPickups[gi].x, map.gunPickups[gi].y, map.gunPickups[gi].gun);
       }
 
       for (var ci = 0; ci < (map.caches || []).length; ci++) {
@@ -3630,17 +3782,11 @@
 
       drawMinimap(text, dim, danger, colours);
 
-      if (patchRun && nearShip() && !shopOpen && playing && !paused) {
+      if (patchRun && nearShip() && playing && !paused) {
         ctx.fillStyle = text;
         ctx.font = "600 13px system-ui, sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("Hold E — patch the hull", w * 0.5, h - 24);
-        ctx.textAlign = "left";
-      } else if (nearTerminal() && !shopOpen && playing && !paused) {
-        ctx.fillStyle = text;
-        ctx.font = "600 13px system-ui, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("E — terminal", w * 0.5, h - 24);
         ctx.textAlign = "left";
       }
 
@@ -3664,7 +3810,7 @@
         ctx.lineWidth = 1;
       }
 
-      if (paused && !shopOpen) {
+      if (paused) {
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, w, h);
         ctx.fillStyle = text;
@@ -3834,12 +3980,7 @@
           towerBlocked(x, y, rad);
       },
       setOnOver: function (fn) { onOver = fn; },
-      setOnShop: function (fn) { onShop = fn; },
       setOnPause: function (fn) { onPause = fn; },
-      purchase: purchase,
-      closeShop: closeShop,
-      shopSnapshot: shopSnapshot,
-      isShopOpen: function () { return shopOpen; },
       getFacing: function () { return player.facing; },
       resize: function (width, height) {
         var dpr = 1;
@@ -3862,7 +4003,6 @@
     crawlerVector: crawlerVector,
     fortressShouldFire: fortressShouldFire,
     WEAPONS: WEAPONS,
-    GUN_ORDER: GUN_ORDER,
-    SHOP_ITEMS: SHOP_ITEMS
+    GUN_ORDER: GUN_ORDER
   };
 })();

@@ -81,8 +81,9 @@ test("twenty decks parse and stay solvable", () => {
     assert.ok(map.exits.length >= 1, "deck " + i + " exit");
     assert.ok(map.keys.length >= 1, "deck " + i + " keys");
     assert.ok(map.doors.length >= 1, "deck " + i + " doors");
-    assert.ok(map.terminals.length >= 1, "deck " + i + " terminal");
     assert.ok(map.ammoCrates.length >= 1, "deck " + i + " ammo");
+    assert.ok((map.healthBooths || []).length >= 1, "deck " + i + " health booth");
+    assert.ok((map.lootCrates || []).length >= 1, "deck " + i + " loot");
     const doorCols = new Set(map.doors.map((d) => d.colour));
     for (const c of doorCols) {
       assert.ok(map.keys.some((k) => k.colour === c), "deck " + i + " key for " + c);
@@ -97,7 +98,8 @@ test("twenty decks parse and stay solvable", () => {
   assert.ok(/Crash/.test(crash.name), "start name");
   assert.ok((crash.ships || []).length >= 1, "crash has ship");
   assert.ok(crash.tiles.some((row) => row.some((t) => t.outdoor)), "crash has outdoor floor");
-  assert.ok((crash.creditCrates || []).length >= 4, "crash has credit scrap");
+  assert.ok((crash.lootCrates || []).length >= 4, "crash has loot boxes");
+  assert.ok((crash.gunPickups || []).some((g) => g.gun === "shotgun"), "crash has Scatter");
   assert.ok((crash.towers || []).length >= 2, "crash has armed towers");
   const macro = GameMap.MACRO || 3;
   for (let y = 0; y < 5 * macro; y++) {

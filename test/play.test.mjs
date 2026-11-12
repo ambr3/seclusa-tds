@@ -106,13 +106,12 @@ function settingsStub() {
 function bootWindow(canvas) {
   const ids = [
     "game", "stage", "scrim",
-    "sheet-theme", "sheet-settings", "sheet-shop",
+    "sheet-theme", "sheet-settings",
     "btn-theme", "btn-settings", "btn-play", "btn-continue", "btn-restart",
-    "btn-menu", "btn-main-menu", "btn-shop-close",
+    "btn-menu", "btn-main-menu",
     "opt-auto-aim", "opt-mute",
     "menu-controls", "menu-best",
     "overlay-menu", "overlay-over", "over-title", "over-score",
-    "shop-credits", "shop-ammo", "shop-hp",
     "playhud", "hud-guns", "hud-score", "hud-hp", "hud-ammo", "hud-deck", "hud-gear",
     "hud-card-R", "hud-card-G", "hud-card-B",
   ];
@@ -304,15 +303,14 @@ test("begin run keeps unlocked guns", () => {
   assert.equal(game.setWeapon("lance"), false);
 });
 
-test("shop lists auto and lance", () => {
+test("weapons include auto and lance", () => {
   const canvas = mockCanvas(320, 240);
   const win = bootWindow(canvas);
   const { GameMap } = load("map.js", win);
   win.GameMap = GameMap;
   win.GameSettings = settingsStub();
   const { ShooterGame } = load("game.js", win);
-  const ids = ShooterGame.SHOP_ITEMS.filter((i) => i.kind === "weapon").map((i) => i.id);
-  assert.deepEqual(ids, ["shotgun", "smg", "rifle", "lance"]);
+  assert.deepEqual(ShooterGame.GUN_ORDER, ["pistol", "shotgun", "smg", "rifle", "lance"]);
   assert.ok(ShooterGame.WEAPONS.smg);
   assert.ok(ShooterGame.WEAPONS.lance);
 });
@@ -359,7 +357,9 @@ test("camera stays locked on the pilot", () => {
       doorsOpen: [],
       keysTaken: [],
       cratesTaken: [],
-      creditsTaken: [],
+      lootTaken: [],
+      boothsUsed: [],
+      gunsTaken: [],
       cachesTaken: [],
       breached: [],
       breachCharges: 0,

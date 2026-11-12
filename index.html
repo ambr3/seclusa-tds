@@ -17,9 +17,9 @@
 
   <title>Seclusa Lockdown</title>
 
-  <script src="static/js/theme-boot.js?v=0.1.49"></script>
+  <script src="static/js/theme-boot.js?v=0.1.53"></script>
   <link rel="stylesheet" href="static/css/seclusa-base.css">
-  <link rel="stylesheet" href="static/css/app.css?v=0.1.49">
+  <link rel="stylesheet" href="static/css/app.css?v=0.1.53">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="static/icons/icon-192.png">
@@ -61,8 +61,8 @@
       <p class="overlay-lede">Your ship is down in the grass outside the fort. Salvage parts inside will get you off this rock.</p>
 
       <ol class="story-beats">
-        <li><span class="story-num">1</span><span class="story-text"><strong>Crash site.</strong> Open grass and wreck. Shoot yellow scrap for credits, grab the red keycard, open the gate.</span></li>
-        <li><span class="story-num">2</span><span class="story-text"><strong>The decks.</strong> Grunts rush. Crawlers hug the walls. Fortresses hold the doors. Doors open red, then green, then blue.</span></li>
+        <li><span class="story-num">1</span><span class="story-text"><strong>Crash site.</strong> Open grass and wreck. Shoot yellow LOOT boxes for ammo, health, and gear. Grab guns and the red keycard, then open the gate.</span></li>
+        <li><span class="story-num">2</span><span class="story-text"><strong>The decks.</strong> Pick up weapons on the floor. Health booths hide off the main path. Doors open red, then green, then blue.</span></li>
         <li><span class="story-num">3</span><span class="story-text"><strong>Salvage bay.</strong> The ship parts are at the end. Clear the fortress core and patch the hull.</span></li>
       </ol>
 
@@ -131,62 +131,15 @@
   </div>
 </div>
 
-<div class="sheet" id="sheet-shop" role="dialog" aria-modal="false" aria-label="Supply terminal" aria-hidden="true">
-  <div class="sheet-handle" aria-hidden="true"></div>
-  <h3>Supply terminal</h3>
-  <p class="note">Credits <span id="shop-credits">0</span> · Ammo <span id="shop-ammo">0</span> · HP <span id="shop-hp">0</span></p>
-  <div class="shop-list">
-    <button type="button" class="shop-item" data-shop-buy="ammo">
-      <span class="shop-name">+30 ammo</span>
-      <span class="shop-tag" data-cost="12">12 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="shotgun">
-      <span class="shop-name">Scatter gun</span>
-      <span class="shop-tag" data-cost="28">28 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="smg">
-      <span class="shop-name">Auto gun</span>
-      <span class="shop-tag" data-cost="40">40 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="rifle">
-      <span class="shop-name">Rifle</span>
-      <span class="shop-tag" data-cost="52">52 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="lance">
-      <span class="shop-name">Lance</span>
-      <span class="shop-tag" data-cost="68">68 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="heal">
-      <span class="shop-name">+1 HP</span>
-      <span class="shop-tag" data-cost="18">18 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="breach">
-      <span class="shop-name">Breach charge</span>
-      <span class="shop-tag" data-cost="26">26 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="dash">
-      <span class="shop-name">Dash</span>
-      <span class="shop-tag" data-cost="32">32 cr</span>
-    </button>
-    <button type="button" class="shop-item" data-shop-buy="hull">
-      <span class="shop-name">Hull patch</span>
-      <span class="shop-tag" data-cost="40">40 cr</span>
-    </button>
-  </div>
-  <div class="shop-actions">
-    <button type="button" class="btn wide" id="btn-shop-close">Close</button>
-  </div>
-</div>
-
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="static/js/store.js?v=0.1.49"></script>
-<script src="static/js/theme.js?v=0.1.49"></script>
-<script src="static/js/settings.js?v=0.1.49"></script>
-<script src="static/js/audio.js?v=0.1.49"></script>
-<script src="static/js/map.js?v=0.1.49"></script>
-<script src="static/js/input.js?v=0.1.49"></script>
-<script src="static/js/game.js?v=0.1.49"></script>
-<script src="static/js/app.js?v=0.1.49"></script>
+<script src="static/js/store.js?v=0.1.53"></script>
+<script src="static/js/theme.js?v=0.1.53"></script>
+<script src="static/js/settings.js?v=0.1.53"></script>
+<script src="static/js/audio.js?v=0.1.53"></script>
+<script src="static/js/map.js?v=0.1.53"></script>
+<script src="static/js/input.js?v=0.1.53"></script>
+<script src="static/js/game.js?v=0.1.53"></script>
+<script src="static/js/app.js?v=0.1.53"></script>
 </body>
 </html>

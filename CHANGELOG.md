@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.53] - 2026-11-12
+
+- Removed supply terminal and credits. Shoot LOOT boxes for ammo, health, guns, and gear. Floor gun pickups, off-path HEALTH booths, clearer world labels.
+
+## [0.1.52] - 2026-11-12
+
+- Doors read as wall plates with a big key-colour lock bar. Stronger open-edge trim. Photo wall/joins stamp one MACRO cell only (no long runs).
+
+## [0.1.51] - 2026-11-12
+
+- Dress the 0.1.3 metal walls: panel seams, rivet density, indoor/outdoor wear. Deck bands — warm early, cool mid, darker late.
+
+## [0.1.50] - 2026-11-11
+
+- Nicer 0.1.3-style walls: cooler concrete, softer bevels, clearer panel rivets. Doors match.
+
 ## [0.1.49] - 2026-11-10
 
 - Restore 0.1.3 metal walls and doors (neighbor lips for corners/crosses). Drop textured join overlap.
