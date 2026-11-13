@@ -1,5 +1,5 @@
 /*
- * Multi-deck tile maps for Seclusa Lockdown.
+ * Multi-deck tile maps for Seclusa TDS.
  *
  * Story: crash → breach the fortress → push inward → salvage ship parts.
  *

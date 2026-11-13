@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate Seclusa Lockdown icons.
+"""Regenerate Seclusa TDS icons.
 
     python3 tools/make_icons.py
 
@@ -57,7 +57,7 @@ def make_maskable(size):
     return out
 
 
-SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Seclusa Lockdown">
+SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Seclusa TDS">
   <rect width="1024" height="1024" rx="200" fill="#0a0a0a"/>
   <rect x="220" y="250" width="584" height="524" rx="48" fill="#ffffff"/>
   <rect x="300" y="330" width="424" height="280" rx="28" fill="#0a0a0a"/>

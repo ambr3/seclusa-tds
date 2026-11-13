@@ -1,5 +1,5 @@
 /*
- * Seclusa Lockdown — sectors, gear, atmosphere, pause, minimap.
+ * Seclusa TDS — sectors, gear, atmosphere, pause, minimap.
  */
 
 (function () {

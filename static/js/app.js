@@ -1,5 +1,5 @@
 /*
- * Seclusa Lockdown shell — sheets, overlays, rAF loop.
+ * Seclusa TDS shell — sheets, overlays, rAF loop.
  */
 
 (function () {
@@ -413,7 +413,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.61";
+  var BUILD = "0.1.62";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;

@@ -1,5 +1,5 @@
 /**
- * Deck placement / biome / choke / reach audits for Seclusa Lockdown.
+ * Deck placement / biome / choke / reach audits for Seclusa TDS.
  * Used by tools/check_decks.mjs and test/placement.test.mjs.
  */
 import { readFileSync } from "node:fs";

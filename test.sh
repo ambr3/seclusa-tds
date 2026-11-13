@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Seclusa Lockdown — run this app's own tests.
+# Seclusa TDS — run this app's own tests.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-echo "→ seclusa lockdown tests @ $PWD"
+echo "→ seclusa TDS tests @ $PWD"
 
 node --test test/*.mjs
 
@@ -25,4 +25,4 @@ else
   exit 1
 fi
 
-echo "→ seclusa lockdown tests passed"
+echo "→ seclusa TDS tests passed"

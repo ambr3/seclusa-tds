@@ -1,6 +1,6 @@
-# Seclusa Lockdown
+# Seclusa TDS
 
-**Very early development.** This is a first public build, not a finished game.
+**Top Down Shooter.** Very early development — first public build, not a finished game.
 Decks, combat, balance, and the look are still changing. Expect rough edges,
 including the install icons.
 
@@ -13,7 +13,7 @@ Offline PWA. Data stays on the device; nothing is sent anywhere.
 
 ## What it does
 
-- Version 0.1.61
+- Version 0.1.62
 - Twenty fortress decks, from the crash site to the salvage bay
 - Keycards, doors, labelled ammo / health / guns, shootable LOOT boxes, side caches, and off-path health booths
 - Blaster, plasma spray, pulse laser, beam, and plasma lance, plus dash, breach, and a hull patch

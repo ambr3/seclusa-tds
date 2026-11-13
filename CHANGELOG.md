@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.62] - 2026-11-13
+
+- Renamed the game to Seclusa TDS (Top Down Shooter). Install id and cache prefix stay `/seclusa-lockdown/` so existing installs keep working.
+
 ## [0.1.61] - 2026-11-13
 
 - Menu content advisory: suggested 12+, sci-fi combat note, and photosensitive / flash / loud-SFX health warning.
