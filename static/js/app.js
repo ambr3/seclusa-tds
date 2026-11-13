@@ -413,7 +413,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.63";
+  var BUILD = "0.1.64";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;
@@ -428,7 +428,7 @@
         if (window.caches && caches.keys) {
           caches.keys().then(function (keys) {
             keys.forEach(function (key) {
-              if (key.indexOf("seclusa-lockdown-") === 0) caches.delete(key);
+              if (key.indexOf("seclusa-tds-") === 0 || key.indexOf("seclusa-lockdown-") === 0) caches.delete(key);
             });
           });
         }

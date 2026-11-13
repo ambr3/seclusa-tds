@@ -1,12 +1,16 @@
 # Changelog
 
+## [0.1.64] - 2026-11-13
+
+- GitHub repo and PWA install id move to seclusa-tds. Service worker still clears old seclusa-lockdown caches.
+
 ## [0.1.63] - 2026-11-13
 
 - PWA / home-screen icons: white background with black vault mark only (no orange bars).
 
 ## [0.1.62] - 2026-11-13
 
-- Renamed the game to Seclusa TDS (Top Down Shooter). Install id and cache prefix stay `/seclusa-lockdown/` so existing installs keep working.
+- Renamed the game to Seclusa TDS (Top Down Shooter). Display name Seclusa TDS / TDS (Top Down Shooter).
 
 ## [0.1.61] - 2026-11-13
 
