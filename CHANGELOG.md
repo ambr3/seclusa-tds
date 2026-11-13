@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.61] - 2026-11-13
+
+- Menu content advisory: suggested 12+, sci-fi combat note, and photosensitive / flash / loud-SFX health warning.
+
 ## [0.1.60] - 2026-11-12
 
 - Touch pads share one layout (FIRE/USE/DASH draw + hit). Audio unlocks on first gesture. Towers fire through their mount wall. Drop door flash, screen shake, unused textures, and committed level-image dumps. Victory survives pause/suspend; run snapshot keeps victory/loot state.

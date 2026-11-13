@@ -413,7 +413,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.60";
+  var BUILD = "0.1.61";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;

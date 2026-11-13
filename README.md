@@ -9,9 +9,11 @@ fight through its decks, salvage the parts, and get airborne again.
 
 Offline PWA. Data stays on the device; nothing is sent anywhere.
 
+**Content:** suggested 12+. Fantasy sci-fi combat and shooting. May include flashing lights, sudden bright effects, rapid motion, and loud SFX. No chat, accounts, or multiplayer.
+
 ## What it does
 
-- Version 0.1.60
+- Version 0.1.61
 - Twenty fortress decks, from the crash site to the salvage bay
 - Keycards, doors, labelled ammo / health / guns, shootable LOOT boxes, side caches, and off-path health booths
 - Blaster, plasma spray, pulse laser, beam, and plasma lance, plus dash, breach, and a hull patch
