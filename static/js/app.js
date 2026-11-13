@@ -413,7 +413,7 @@
     syncPlayHud();
   }
 
-  var BUILD = "0.1.64";
+  var BUILD = "0.1.65";
 
   function registerSw() {
     if (!("serviceWorker" in navigator)) return;
@@ -476,7 +476,9 @@
     showOverlay("overlay-menu");
     /* First gesture unlocks Web Audio (browsers start the context suspended). */
     document.addEventListener("pointerdown", unlockAudio, true);
+    document.addEventListener("touchstart", unlockAudio, { capture: true, passive: true });
     document.addEventListener("keydown", unlockAudio, true);
+    document.addEventListener("click", unlockAudio, true);
     registerSw();
   }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.65] - 2026-11-13
+
+- Harder Web Audio unlock (silent buffer kick, re-unlock after background) and slightly louder SFX. Drop the Run section from the README.
+
 ## [0.1.64] - 2026-11-13
 
 - GitHub repo and PWA install id move to seclusa-tds. Service worker still clears old seclusa-lockdown caches.
