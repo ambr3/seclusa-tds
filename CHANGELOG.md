@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.66] - 2026-11-14
+
+- iOS installed PWA: solid status bar (`apple-mobile-web-app-status-bar-style` black) to avoid top blur.
+
 ## [0.1.65] - 2026-11-13
 
 - Harder Web Audio unlock (silent buffer kick, re-unlock after background) and slightly louder SFX. Drop the Run section from the README.
